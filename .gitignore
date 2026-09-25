@@ -1,0 +1,8 @@
+/.toolchain/
+/bin/
+/dist/
+*.test
+*.out
+*.prof
+coverage.*
+/data/
