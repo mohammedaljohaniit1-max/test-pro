@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="syspulse-token" content="{{TOKEN}}">
+<title>SysPulse — System Diagnostics</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="/favicon.svg" alt="" width="28" height="28">
+    <span class="name">Sys<b>Pulse</b></span>
+    <span class="ver">v{{VERSION}}</span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="overview" role="tab">Overview</button>
+    <button class="tab" data-tab="network" role="tab">Network <span class="badge" id="b-net">0</span></button>
+    <button class="tab" data-tab="processes" role="tab">Processes <span class="badge" id="b-proc">0</span></button>
+    <button class="tab" data-tab="events" role="tab">Event Log <span class="badge warn" id="b-ev">0</span></button>
+    <button class="tab" data-tab="software" role="tab">Software <span class="badge ok" id="b-sw">–</span></button>
+  </nav>
+  <div class="status"><span id="conn-dot" class="dot"></span><span id="conn-text">connecting…</span></div>
+</header>
+
+<main>
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="panel active">
+    <div class="host" id="host-line">–</div>
+    <div class="cards">
+      <div class="card"><div class="k">CPU</div><div class="v" id="c-cpu">–</div><div class="s" id="c-cores">–</div></div>
+      <div class="card"><div class="k">Memory</div><div class="v" id="c-mem">–</div><div class="s" id="c-mem2">–</div></div>
+      <div class="card"><div class="k">Commit</div><div class="v" id="c-commit">–</div><div class="s" id="c-commit2">–</div></div>
+      <div class="card"><div class="k">Processes</div><div class="v" id="c-procs">–</div><div class="s" id="c-threads">–</div></div>
+      <div class="card"><div class="k">Sockets</div><div class="v" id="c-socks">–</div><div class="s" id="c-rate">–</div></div>
+      <div class="card"><div class="k">Uptime</div><div class="v" id="c-up">–</div><div class="s">since last boot</div></div>
+    </div>
+    <div class="grid2">
+      <div class="box"><h3>CPU &amp; memory — last 5 minutes</h3><canvas id="ch-sys" height="220"></canvas>
+        <div class="legend"><span class="l-cpu">CPU %</span><span class="l-mem">Memory %</span></div></div>
+      <div class="box"><h3>Disks</h3><div id="disks"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="box"><h3>Top processes by CPU</h3><table class="mini"><tbody id="top-procs"></tbody></table></div>
+      <div class="box"><h3>Recent errors &amp; warnings</h3><ul class="feed" id="ov-feed"></ul></div>
+    </div>
+  </section>
+
+  <!-- NETWORK -->
+  <section id="tab-network" class="panel">
+    <div class="grid3">
+      <div class="box"><h3>Connection states</h3><div id="net-states" class="bars"></div></div>
+      <div class="box"><h3>Top processes by sockets</h3><div id="net-procs" class="bars"></div></div>
+      <div class="box"><h3>Top remote hosts (established)</h3><div id="net-remotes" class="bars"></div></div>
+    </div>
+    <div class="box">
+      <div class="toolbar">
+        <h3>Active sockets</h3>
+        <input id="net-q" type="search" placeholder="Filter by process, address, port, state…">
+        <select id="net-proto"><option value="">All protocols</option><option>TCP</option><option>TCP6</option><option>UDP</option><option>UDP6</option></select>
+        <select id="net-state"><option value="">All states</option><option>ESTABLISHED</option><option>LISTEN</option><option>TIME_WAIT</option><option>CLOSE_WAIT</option><option>SYN_SENT</option></select>
+        <label class="chk"><input type="checkbox" id="net-hide-local"> hide loopback</label>
+      </div>
+      <div class="tablewrap"><table class="grid" id="net-table">
+        <thead><tr><th data-k="proto">Proto</th><th data-k="processName">Process</th><th data-k="pid" class="num">PID</th><th data-k="localAddr">Local address</th><th data-k="localPort" class="num">Port</th><th data-k="remoteAddr">Remote address</th><th data-k="remotePort" class="num">Port</th><th data-k="state">State</th><th data-k="firstSeen">First seen</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="net-foot"></div>
+    </div>
+  </section>
+
+  <!-- PROCESSES -->
+  <section id="tab-processes" class="panel">
+    <div class="box">
+      <div class="toolbar">
+        <h3>Processes</h3>
+        <input id="proc-q" type="search" placeholder="Filter by name, PID or path…">
+      </div>
+      <div class="tablewrap"><table class="grid" id="proc-table">
+        <thead><tr><th data-k="name">Name</th><th data-k="pid" class="num">PID</th><th data-k="ppid" class="num">Parent</th><th data-k="cpu" class="num">CPU %</th><th data-k="workingSet" class="num">Working set</th><th data-k="private" class="num">Private</th><th data-k="threads" class="num">Threads</th><th data-k="started">Started</th><th data-k="path">Path</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="proc-foot"></div>
+    </div>
+  </section>
+
+  <!-- EVENTS -->
+  <section id="tab-events" class="panel">
+    <div class="box"><h3>Event volume — last 7 days <span class="muted">(3-hour buckets)</span></h3><canvas id="ch-ev" height="170"></canvas>
+      <div class="legend"><span class="l-crit">Critical</span><span class="l-err">Error</span><span class="l-warn">Warning</span><span class="l-info">Info</span></div></div>
+    <div class="cats" id="ev-cats"></div>
+    <div class="box">
+      <div class="toolbar">
+        <h3>Events</h3>
+        <input id="ev-q" type="search" placeholder="Search source or message…">
+        <select id="ev-level"><option value="">All levels</option><option value="critical">Critical</option><option value="error">Error</option><option value="warning">Warning</option><option value="info">Info</option></select>
+        <select id="ev-cat"><option value="">All categories</option></select>
+      </div>
+      <div class="note" id="ev-err" hidden></div>
+      <div class="tablewrap"><table class="grid" id="ev-table">
+        <thead><tr><th>Time</th><th>Level</th><th>Category</th><th>Source</th><th class="num">ID</th><th>Channel</th><th>Message</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="ev-foot"></div>
+    </div>
+  </section>
+
+  <!-- SOFTWARE -->
+  <section id="tab-software" class="panel">
+    <div class="box">
+      <div class="toolbar">
+        <h3>Available upgrades <span class="muted" id="sw-when"></span></h3>
+        <button class="btn" id="sw-refresh">Check for updates</button>
+      </div>
+      <div class="note" id="sw-err" hidden></div>
+      <div class="tablewrap"><table class="grid" id="up-table">
+        <thead><tr><th>Name</th><th>Package ID</th><th>Installed</th><th>Available</th><th>Source</th><th>Command</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <div id="sw-results"></div>
+    </div>
+    <div class="box">
+      <div class="toolbar">
+        <h3>Installed applications <span class="muted" id="app-count"></span></h3>
+        <input id="app-q" type="search" placeholder="Filter by name or publisher…">
+        <label class="chk"><input type="checkbox" id="app-upd"> only with updates</label>
+      </div>
+      <div class="tablewrap"><table class="grid" id="app-table">
+        <thead><tr><th data-k="name">Name</th><th data-k="version">Version</th><th data-k="available">Update</th><th data-k="publisher">Publisher</th><th data-k="installDate">Installed</th><th data-k="sizeKB" class="num">Size</th><th data-k="scope">Scope</th></tr></thead>
+        <tbody></tbody></table></div>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast" hidden></div>
+<script src="/assets/app.js"></script>
+</body>
+</html>
