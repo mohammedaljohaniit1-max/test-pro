@@ -1,5 +1,5 @@
 # Cross-compile helpers for non-Windows hosts. On Windows use build.bat.
-VERSION ?= 1.0.0
+VERSION ?= 2.0.0
 MODULE  := github.com/mohammedaljohaniit1-max/test-pro
 LDFLAGS := -s -w -X $(MODULE)/internal/server.Version=$(VERSION)
 

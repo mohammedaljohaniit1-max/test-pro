@@ -64,6 +64,16 @@ func ParseXML(raw, message string) (model.Event, error) {
 	if t, err := time.Parse(time.RFC3339Nano, x.System.TimeCreated.SystemTime); err == nil {
 		e.Time = t.UTC()
 	}
+	if n := len(x.EventData.Data); n > 0 {
+		e.Data = make(map[string]string, n)
+		for i, d := range x.EventData.Data {
+			v := strings.TrimSpace(d.Value)
+			if d.Name != "" {
+				e.Data[d.Name] = v
+			}
+			e.Data["#"+strconv.Itoa(i)] = v
+		}
+	}
 	msg := strings.TrimSpace(message)
 	if msg == "" {
 		var parts []string
@@ -270,4 +280,27 @@ func SortNewestFirst(evs []model.Event) {
 		}
 		return evs[i].RecordID > evs[j].RecordID
 	})
+}
+
+// AuditXPath builds an XPath filter selecting the given event IDs within
+// the last `window`. Used by the one-click diagnostic audits, which read
+// specific IDs over a long window instead of the whole channel.
+func AuditXPath(ids []uint32, window time.Duration) string {
+	var b strings.Builder
+	b.WriteString("*[System[(")
+	for i, id := range ids {
+		if i > 0 {
+			b.WriteString(" or ")
+		}
+		b.WriteString("EventID=")
+		b.WriteString(strconv.FormatUint(uint64(id), 10))
+	}
+	b.WriteString(")")
+	if ms := window.Milliseconds(); ms > 0 {
+		b.WriteString(" and TimeCreated[timediff(@SystemTime) <= ")
+		b.WriteString(strconv.FormatInt(ms, 10))
+		b.WriteString("]")
+	}
+	b.WriteString("]]")
+	return b.String()
 }

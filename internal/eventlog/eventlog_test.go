@@ -103,3 +103,14 @@ func TestSummarize(t *testing.T) {
 		t.Fatal("sort")
 	}
 }
+
+func TestParseXMLEventData(t *testing.T) {
+	raw := `<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-Security-Auditing"/><EventID>4625</EventID><Level>0</Level><TimeCreated SystemTime="2026-09-25T10:00:00.000Z"/><EventRecordID>77</EventRecordID><Channel>Security</Channel></System><EventData><Data Name="TargetUserName">admin</Data><Data Name="IpAddress">203.0.113.9</Data><Data>positional</Data></EventData></Event>`
+	e, err := ParseXML(raw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Data["TargetUserName"] != "admin" || e.Data["IpAddress"] != "203.0.113.9" || e.Data["#2"] != "positional" || e.Data["#0"] != "admin" {
+		t.Fatalf("%v", e.Data)
+	}
+}

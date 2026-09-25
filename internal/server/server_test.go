@@ -133,7 +133,7 @@ func TestIndexEmbedsTokenAndAssets(t *testing.T) {
 	if code != 200 || !strings.Contains(body, e.srv.Token()) || strings.Contains(body, "{{TOKEN}}") {
 		t.Fatalf("index: %d", code)
 	}
-	for _, p := range []string{"/assets/app.js", "/assets/app.css", "/favicon.svg"} {
+	for _, p := range []string{"/assets/app.js", "/assets/app.css", "/assets/i18n.js", "/assets/guide.js", "/favicon.svg"} {
 		resp, err := http.Get(e.ts.URL + p)
 		if err != nil || resp.StatusCode != 200 {
 			t.Fatalf("%s: %v %v", p, err, resp.StatusCode)

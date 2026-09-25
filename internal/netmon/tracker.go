@@ -190,3 +190,15 @@ func topN(m map[string]int, n int) []model.ProcCount {
 	}
 	return out
 }
+
+// Listening returns the set of listening TCP ports keyed by
+// radar-compatible "PROTO:port" (e.g. "TCP:445", "TCP6:3389").
+func (t *Tracker) Listening() map[string]bool {
+	m := map[string]bool{}
+	for _, c := range t.cur {
+		if c.State == "LISTEN" {
+			m[c.Proto+":"+formatUint(uint64(c.LocalPort))] = true
+		}
+	}
+	return m
+}

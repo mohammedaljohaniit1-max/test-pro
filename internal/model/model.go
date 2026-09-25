@@ -129,6 +129,10 @@ type Event struct {
 	Computer string    `json:"computer,omitempty"`
 	Message  string    `json:"message"`
 	Category string    `json:"category"`
+	// Data holds the EventData / UserData fields (named, plus positional
+	// keys "#0", "#1", …). It is used by the diagnostic audits and is not
+	// sent to the dashboard with the live event stream.
+	Data map[string]string `json:"-"`
 }
 
 // App is one installed application from the registry.
@@ -154,6 +158,97 @@ type Upgrade struct {
 	Available string `json:"available"`
 	Source    string `json:"source"`
 	Command   string `json:"command"`
+}
+
+// Text is a bilingual (English / Arabic) string. The dashboard picks the
+// active language; reports and exports can include both.
+type Text struct {
+	En string `json:"en"`
+	Ar string `json:"ar"`
+}
+
+// T builds a Text.
+func T(en, ar string) Text { return Text{En: en, Ar: ar} }
+
+// Get returns the text in lang ("ar" or anything else for English).
+func (t Text) Get(lang string) string {
+	if lang == "ar" && t.Ar != "" {
+		return t.Ar
+	}
+	return t.En
+}
+
+// Severity levels used by alerts and audit findings.
+const (
+	SevCritical = "critical"
+	SevWarning  = "warning"
+	SevInfo     = "info"
+)
+
+// SeverityRank orders severities (critical first).
+func SeverityRank(s string) int {
+	switch s {
+	case SevCritical:
+		return 0
+	case SevWarning:
+		return 1
+	}
+	return 2
+}
+
+// Alert categories.
+const (
+	AlertNetworkSweep = "network-sweep"
+	AlertAuth         = "authentication"
+	AlertReliability  = "reliability"
+	AlertResource     = "resource"
+	AlertSystem       = "system"
+)
+
+// Alert is one entry in the Alerts & Incidents stream.
+type Alert struct {
+	ID       string            `json:"id"`
+	Time     time.Time         `json:"time"`
+	Severity string            `json:"severity"` // critical, warning, info
+	Category string            `json:"category"`
+	Title    Text              `json:"title"`
+	Detail   Text              `json:"detail"`
+	Source   string            `json:"source"` // radar, eventlog, audit, metrics, syspulse
+	Fields   map[string]string `json:"fields,omitempty"`
+	Count    int               `json:"count"` // occurrences folded into this alert
+	Updated  time.Time         `json:"updated"`
+	Acked    bool              `json:"acked"`
+}
+
+// Finding is one diagnosed issue produced by an event-log audit.
+type Finding struct {
+	ID        string            `json:"id"`
+	Kind      string            `json:"kind"` // failed-logon, privileged-logon, service-crash, app-fault, bugcheck, unexpected-shutdown
+	Severity  string            `json:"severity"`
+	Title     Text              `json:"title"`
+	Subject   string            `json:"subject"` // account, service, application, stop code…
+	EventIDs  []uint32          `json:"eventIds"`
+	Count     int               `json:"count"`
+	First     time.Time         `json:"first"`
+	Last      time.Time         `json:"last"`
+	Details   map[string]string `json:"details,omitempty"`
+	Diagnosis Text              `json:"diagnosis"`
+	Fix       Text              `json:"fix"`
+	Samples   []string          `json:"samples,omitempty"`
+}
+
+// AuditReport is the result of one diagnostic button press.
+type AuditReport struct {
+	Kind      string         `json:"kind"` // auth, reliability
+	Started   time.Time      `json:"started"`
+	Finished  time.Time      `json:"finished"`
+	WindowH   int            `json:"windowHours"`
+	Scanned   int            `json:"scanned"`
+	ByEventID map[string]int `json:"byEventId"`
+	BySev     map[string]int `json:"bySeverity"`
+	Findings  []Finding      `json:"findings"`
+	Errors    []string       `json:"errors,omitempty"`
+	Notes     []Text         `json:"notes,omitempty"`
 }
 
 // Message is the WebSocket envelope.

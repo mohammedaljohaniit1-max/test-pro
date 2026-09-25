@@ -410,11 +410,14 @@ func main() {
 	sm := sysmon.New(newPlat(), 300)
 	h := hub.New(hub.Config{MetricsEvery: time.Second, NetEvery: time.Second, EventsEvery: 5 * time.Second,
 		Channels: []string{"System", "Application"}}, log, sm, pm, tracker, newEvents())
+	h.SetRadarPlatform(demoRadarPlat{})
+	h.SetAuditSource(newDemoAudit())
 	srv := server.New(h, newSW(), log, *addr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go h.Run(ctx)
+	go runDemoTraffic(ctx, h)
 	if *preview != "" {
 		go func() {
 			if err := servePreview(*preview, *addr, log); err != nil {

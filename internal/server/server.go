@@ -100,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/software", s.software)
 	mux.HandleFunc("POST /api/software/refresh", s.guard(s.refreshSoftware))
 	mux.HandleFunc("POST /api/software/upgrade", s.guard(s.upgrade))
+	s.routesV2(mux)
 	return securityHeaders(mux)
 }
 

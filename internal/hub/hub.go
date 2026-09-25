@@ -35,6 +35,13 @@ type Config struct {
 	EventWindow  time.Duration // how far back the initial event query goes
 	MaxEvents    int
 	Channels     []string
+
+	// SysPulse 2.0: connection-sweep radar and alerts.
+	RadarWindow    time.Duration // default 5 s
+	RadarThreshold int           // flag when distinct ports > threshold (default 10)
+	RadarCooldown  time.Duration // default 60 s
+	RadarAllow     []string      // remote IPs never flagged
+	AlertsMax      int           // default 2000
 }
 
 func (c *Config) defaults() {
@@ -77,6 +84,7 @@ type Hub struct {
 	netErr  string
 	dropped atomic.Uint64
 	now     func() time.Time
+	v2
 }
 
 // Subscriber is one connected dashboard.
@@ -89,8 +97,10 @@ type Subscriber struct {
 // New wires a hub. events may be nil (event log unavailable).
 func New(cfg Config, log *slog.Logger, sys *sysmon.Monitor, procs *procmon.Monitor, net *netmon.Tracker, events EventSource) *Hub {
 	cfg.defaults()
-	return &Hub{cfg: cfg, log: log, sys: sys, procs: procs, net: net, events: events,
+	h := &Hub{cfg: cfg, log: log, sys: sys, procs: procs, net: net, events: events,
 		subs: map[*Subscriber]struct{}{}, lastRec: map[string]uint64{}, now: time.Now}
+	h.initV2()
+	return h
 }
 
 // Subscribe registers a subscriber with a bounded queue.
@@ -194,6 +204,7 @@ func (h *Hub) collectMetrics() {
 		h.log.Warn("system sample failed", "err", err)
 		return
 	}
+	h.resourceAlerts(m)
 	if h.Subscribers() == 0 {
 		return
 	}
@@ -216,14 +227,19 @@ func (h *Hub) collectNet() {
 		h.netErr = ""
 	}
 	var stats model.NetStats
+	var listening map[string]bool
 	if err == nil {
 		stats = h.net.Stats()
+		listening = h.net.Listening()
 	}
 	h.netMu.Unlock()
 	if err != nil {
 		h.log.Warn("connection poll failed", "err", err)
+		h.radarTickFn()
 		return
 	}
+	h.feedTableSensor(d, listening)
+	h.radarTickFn()
 	if h.Subscribers() == 0 {
 		return
 	}
@@ -286,6 +302,9 @@ func (h *Hub) collectEvents() {
 	}
 	h.evs = keep
 	h.evMu.Unlock()
+	if len(errs) == 0 || len(fresh) > 0 {
+		h.eventAlerts(fresh)
+	}
 	if len(fresh) > 0 && h.Subscribers() > 0 {
 		eventlog.SortNewestFirst(fresh)
 		h.Broadcast("events", fresh)
@@ -326,6 +345,10 @@ type Snapshot struct {
 	EventStats  eventlog.Summary      `json:"eventsummary"`
 	EventError  string                `json:"eventError,omitempty"`
 	NetError    string                `json:"netError,omitempty"`
+	Radar       any                   `json:"radar"`
+	Alerts      []model.Alert         `json:"alerts"`
+	AlertCounts any                   `json:"alertcounts"`
+	Audit       AuditState            `json:"audit"`
 }
 
 // Snapshot builds the full current state.
@@ -343,5 +366,7 @@ func (h *Hub) Snapshot() Snapshot {
 		Metrics: h.sys.Last(), History: h.sys.History(), Processes: h.procs.Last(),
 		Connections: conns, NetStats: ns, Events: evs, EventStats: h.EventSummary(),
 		EventError: evErr, NetError: netErr,
+		Radar: h.radar.Snapshot(100), Alerts: h.alerts.List(alertsFilter(500)), AlertCounts: h.alerts.Counts(),
+		Audit: h.AuditState(),
 	}
 }

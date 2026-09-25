@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/model"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/procmon"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/radar"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/server"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/software"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/sysmon"
@@ -46,6 +48,13 @@ type eventSource struct{ r *eventlog.Reader }
 
 func (e eventSource) Query(ch string, since time.Time, max, lvl int, after uint64) ([]model.Event, error) {
 	return e.r.Query(ch, since, max, lvl, after)
+}
+
+// auditSource adapts eventlog.Reader to audit.Source.
+type auditSource struct{ r *eventlog.Reader }
+
+func (a auditSource) QueryXPath(ch, xpath string, max int, format bool) ([]model.Event, error) {
+	return a.r.QueryXPath(ch, xpath, max, format)
 }
 
 func isElevated() bool {
@@ -80,6 +89,11 @@ func main() {
 		window   = flag.Duration("events-window", 7*24*time.Hour, "how far back to read the event log")
 		maxEv    = flag.Int("events-max", 2000, "maximum events retained per channel")
 		interval = flag.Duration("interval", time.Second, "system/process/network sampling interval")
+		radarWin = flag.Duration("radar-window", 5*time.Second, "connection-sweep detection window")
+		radarThr = flag.Int("radar-threshold", 10, "flag a remote IP that contacts more than this many distinct ports within -radar-window")
+		radarCD  = flag.Duration("radar-cooldown", 60*time.Second, "quiet time after which a sweep incident is closed")
+		radarAll = flag.String("radar-allow", "", "comma-separated remote IPs never flagged (e.g. authorised vulnerability scanners)")
+		noRaw    = flag.Bool("no-raw-capture", false, "disable the raw SYN sensor (SIO_RCVALL); use the TCP table only")
 		verbose  = flag.Bool("v", false, "verbose logging")
 		version  = flag.Bool("version", false, "print version and exit")
 	)
@@ -109,11 +123,23 @@ func main() {
 	h := hub.New(hub.Config{
 		MetricsEvery: *interval, NetEvery: *interval, EventsEvery: 15 * time.Second,
 		EventWindow: *window, MaxEvents: *maxEv, Channels: []string{"System", "Application"},
+		RadarWindow: *radarWin, RadarThreshold: *radarThr, RadarCooldown: *radarCD, RadarAllow: splitList(*radarAll),
 	}, log, sm, pm, tracker, eventSource{er})
+	rp := radar.NewSystemPlatform()
+	h.SetRadarPlatform(rp)
+	h.SetAuditSource(auditSource{er})
 	srv := server.New(h, sw{}, log, *addr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	h.Radar().SetSensor(radar.SensorStatus{Name: radar.SensorTable, Active: true, Detail: "new inbound rows of GetExtendedTcpTable (accepted connections, IPv4 + IPv6)"})
+	if *noRaw {
+		h.Radar().SetSensor(radar.SensorStatus{Name: radar.SensorRaw, Detail: "raw SYN capture (SIO_RCVALL)", Error: "disabled by -no-raw-capture"})
+	} else if err := radar.StartRawSensor(ctx, rp, h.ObserveRadar, h.Radar().SetSensor); err != nil {
+		log.Info("raw SYN sensor unavailable; sweep radar uses the TCP table only", "reason", err)
+	} else {
+		log.Info("raw SYN sensor active: every inbound TCP SYN is evaluated by the sweep radar")
+	}
 	go h.Run(ctx)
 
 	setConsoleTitle("SysPulse " + server.Version + " — http://" + *addr)
@@ -153,4 +179,14 @@ func banner(addr string, elevated bool) string {
   Press Ctrl+C to stop.
 
 `, server.Version, addr, mode)
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

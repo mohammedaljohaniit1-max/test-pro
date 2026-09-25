@@ -32,6 +32,7 @@ const (
 	evtRenderEventXML        = 1
 	evtFormatMessageEvent    = 1
 	errNoMoreItems           = 259
+	errAccessDenied          = 5
 	batchSize                = 64
 )
 
@@ -87,11 +88,22 @@ func (r *Reader) Query(channel string, since time.Time, maxEvents int, maxLevel 
 		cond += fmt.Sprintf(" and EventRecordID > %d", afterRecord)
 	}
 	xpath := "*[System[" + cond + "]]"
+	return r.QueryXPath(channel, xpath, maxEvents, true)
+}
+
+// QueryXPath runs an arbitrary XPath filter against channel, newest first.
+// When format is false the (slow) EvtFormatMessage step is skipped and the
+// message is rebuilt from EventData — the audits only need the fields.
+func (r *Reader) QueryXPath(channel, xpath string, maxEvents int, format bool) ([]model.Event, error) {
 	ch, _ := windows.UTF16PtrFromString(channel)
 	q, _ := windows.UTF16PtrFromString(xpath)
 	h, _, err := procEvtQuery.Call(0, uintptr(unsafe.Pointer(ch)), uintptr(unsafe.Pointer(q)),
 		evtQueryChannelPath|evtQueryReverseDirection)
 	if h == 0 {
+		var en syscall.Errno
+		if errors.As(err, &en) && en == errAccessDenied {
+			return nil, fmt.Errorf("EvtQuery(%s): access denied — run SysPulse as administrator to read this log", channel)
+		}
 		return nil, fmt.Errorf("EvtQuery(%s): %w", channel, err)
 	}
 	defer evtClose(evtHandle(h))
@@ -111,7 +123,7 @@ func (r *Reader) Query(channel string, since time.Time, maxEvents int, maxLevel 
 		}
 		for i := uint32(0); i < returned; i++ {
 			if len(out) < maxEvents {
-				if ev, err := r.render(handles[i]); err == nil {
+				if ev, err := r.render(handles[i], format); err == nil {
 					out = append(out, ev)
 				}
 			}
@@ -121,14 +133,14 @@ func (r *Reader) Query(channel string, since time.Time, maxEvents int, maxLevel 
 	return out, nil
 }
 
-func (r *Reader) render(ev evtHandle) (model.Event, error) {
+func (r *Reader) render(ev evtHandle, format bool) (model.Event, error) {
 	raw, err := renderXML(ev)
 	if err != nil {
 		return model.Event{}, err
 	}
 	// Parse once without a message to learn the provider, then format.
 	e, err := ParseXML(raw, "")
-	if err != nil {
+	if err != nil || !format {
 		return e, err
 	}
 	if msg := r.format(e.Provider, ev); msg != "" {

@@ -1,4 +1,6 @@
-# SysPulse
+# SysPulse 2.0
+
+> **Windows Observability & System Reliability Cockpit** — bilingual (English / العربية with full RTL), with a multi-port connection-sweep radar, one-click event-log diagnostics, an Alerts & Incidents centre and an integrated user guide.
 
 A native **Windows system diagnostics and observability suite** in Go. It builds to one self-contained `syspulse.exe` with an embedded dark-theme dashboard at **http://localhost:9099**, which receives live telemetry over WebSocket.
 
@@ -10,6 +12,10 @@ It reads the machine and does not change it. The one exception is the software u
 | **Processes** | CPU %, working set (RSS), private bytes, threads, start time, image path. Sampled by a pool of worker goroutines. | Toolhelp32 snapshot, `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)`, `GetProcessTimes`, `QueryFullProcessImageNameW`, `psapi!GetProcessMemoryInfo` |
 | **System** | CPU % and RAM history charts, commit charge, uptime, capacity of every logical drive | `GetSystemTimes`, `GlobalMemoryStatusEx`, `GetPerformanceInfo`, `GetDiskFreeSpaceExW`, `GetTickCount64` |
 | **Event log** | System and Application channels, classified as service crash, app fault, unexpected shutdown, driver, disk, Windows Update, power or other. Includes a 7-day stacked timeline. | `wevtapi!EvtQuery` / `EvtNext` / `EvtRender` / `EvtFormatMessage` |
+| **Anomaly Radar** *(2.0)* | Per-remote-IP inbound connection frequency and distinct-port breadth. **Rule: >10 distinct ports within 5 s ⇒ "High-Frequency Connection Sweep (Traffic Anomaly)"**. Red banner + audio chime with remote IP, MAC, interface, port range and timestamp. | Raw `SOCK_RAW` + `SIO_RCVALL` SYN sensor (admin), `GetExtendedTcpTable` sensor, `GetIpNetTable`, `GetBestRoute`, `SendARP`, `GetAdaptersAddresses` |
+| **Diagnostics** *(2.0)* | **Audit Authentication & Access Logs** (4625 failed logons, brute force, password spraying, 4740 lockouts, 4672 privilege assignments) and **Audit System Reliability & Faults** (7034/7031 service crashes, 1000 app faults, 1002 hangs, bugchecks with decoded stop codes, 41/6008 unexpected shutdowns). Every finding has a *Plain-Language Diagnosis* and *Recommended Fix* column in both languages; JSON/CSV export. | `wevtapi!EvtQuery` with ID-filtered XPath over Security / System / Application |
+| **Alerts & Incidents** *(2.0)* | Critical / Warning / Informational badges, de-duplication with counts, quick filters, search, acknowledgement, one-click JSON/CSV export (UTF-8 BOM, formula-injection safe). Fed by the radar, the event log, the audits and resource thresholds. | all modules |
+| **User Guide / دليل الاستخدام** *(2.0)* | Metric and feature comparison tables, sensor explanations, flags, troubleshooting and a step-by-step **Verification Guide** for safely testing sweep detection on your own LAN. | embedded |
 | **Software** | Installed programs from the registry Uninstall keys (HKLM 64-bit, HKLM 32-bit, HKCU), merged with `winget upgrade` results. Upgradable packages get a one-click **Upgrade** button. | `x/sys/windows/registry`, `winget.exe` |
 
 ## Directory structure
@@ -32,9 +38,12 @@ It reads the machine and does not change it. The one exception is the software u
     ├── eventlog/                 # XML parsing, classification, timeline + wevtapi reader
     ├── software/                 # registry inventory filter, winget parser/merger + Windows backend
     ├── ws/                       # dependency-free RFC 6455 WebSocket server
+    ├── radar/                    # sweep detector, ARP/raw-packet parsing, SIO_RCVALL sensor (Windows)
+    ├── alerts/                   # alert store, filters, JSON/CSV export
+    ├── audit/                    # auth + reliability analysis with bilingual diagnosis/fix
     ├── hub/                      # collector scheduler and WebSocket fan-out
     └── server/                   # HTTP API, security, go:embed of web/
-        └── web/                  # index.html, assets/app.js, assets/app.css, favicon.svg
+        └── web/                  # index.html, assets/{app,i18n,guide}.js, assets/app.css, favicon.svg
 ```
 
 Every package has platform-neutral logic (parsing, diffing, CPU maths, classification, winget table parsing) that is unit-tested on any OS. Only the thin `*_windows.go` files call Win32.
@@ -44,7 +53,7 @@ Every package has platform-neutral logic (parsing, diffing, CPU maths, classific
 On **Windows**, with Go 1.23+ installed:
 
 ```bat
-build.bat               :: vet + test + build dist\syspulse.exe (v1.0.0, amd64)
+build.bat               :: vet + test + build dist\syspulse.exe (v2.0.0, amd64)
 build.bat 1.2.0 arm64   :: custom version / architecture
 set SKIP_TESTS=1 && build.bat
 ```
@@ -73,6 +82,11 @@ syspulse.exe -no-browser -addr 127.0.0.1:9100
 | `-interval` | `1s` | Sampling period for system, process and network data. |
 | `-events-window` | `168h` | How far back the event log is read at start-up. |
 | `-events-max` | `2000` | Events kept per channel. |
+| `-radar-window` | `5s` | Sweep detection window. |
+| `-radar-threshold` | `10` | Flag a remote IP that touches more than N distinct ports within the window. |
+| `-radar-cooldown` | `60s` | Quiet time after which a sweep incident closes. |
+| `-radar-allow` | | Comma-separated IPs never flagged (authorised scanners). |
+| `-no-raw-capture` | `false` | Disable the raw SYN sensor and use the TCP table only. |
 | `-v` | `false` | Debug logging. |
 | `-version` | | Print the version and exit. |
 
@@ -96,7 +110,16 @@ SysPulse shows sensitive host data and can start `winget`, so the HTTP surface i
 - **Same-origin.** The WebSocket upgrade and every `POST` must carry `Origin: http://<host>`.
 - **No argument injection.** Package IDs must match `^[A-Za-z0-9][A-Za-z0-9._+\-]{0,127}$`, and winget runs through `exec.Command` with discrete arguments, never a shell. Only packages from the last `winget upgrade` listing may be upgraded, and only one upgrade runs at a time.
 - **Strict CSP.** `script-src 'self'; style-src 'self'`. There are no inline scripts or styles and no CDNs; charts are drawn on `<canvas>`. Other headers: `X-Frame-Options: DENY`, `nosniff`, `no-referrer`.
-- The Security event log is **not** read.
+- The Security event log is read **only** when you press *Audit Authentication & Access Logs*.
+- The raw sensor uses `RCVALL_IPLEVEL` (no promiscuous NIC mode) and parses only IP/TCP headers.
+- Report downloads require the session token; CSV cells starting with `= + - @` are neutralised.
+
+## Verifying sweep detection
+
+1. **Radar → Run safe self-test**: a synthetic sweep from `198.51.100.77` triggers the banner, chime and a critical alert without sending any packets.
+2. On a second machine you own, on the same LAN: `nmap -sS -p 1-100 -T4 <this-PC-IP>` or the PowerShell loop in the in-app guide. Within a second the banner shows that machine's IP and MAC (compare with `ipconfig /all`).
+
+Only scan machines you own or are authorised to test.
 
 ## HTTP / WebSocket API
 
@@ -112,8 +135,17 @@ SysPulse shows sensitive host data and can start `winget`, so the HTTP surface i
 | GET | `/api/software` | Inventory merged with upgrades, winget status |
 | POST | `/api/software/refresh` | Re-run `winget upgrade` (token + origin) |
 | POST | `/api/software/upgrade` `{"id":"Vendor.App"}` | Upgrade one package (token + origin) |
+| GET | `/api/radar?limit=` | Radar state: rule, sensors, per-IP stats, incidents, 60 s series |
+| GET | `/api/radar/neighbors` | Cached ARP table |
+| POST | `/api/radar/selftest` `{"ports":24}` | Inject a synthetic sweep from 198.51.100.77 (token + origin) |
+| GET | `/api/alerts?severity=&category=&q=&unacked=&since=&limit=` | Filtered alerts + counts |
+| GET | `/api/alerts/export?format=json\|csv&lang=en\|ar&…&token=` | Download the filtered alert report |
+| POST | `/api/alerts/ack` `{"ids":[]}` · `/api/alerts/clear` | Acknowledge (empty = all) / clear (token + origin) |
+| GET | `/api/audit` | Last report per audit, running audits |
+| POST | `/api/audit/auth` · `/api/audit/reliability` `{"hours":168}` | Run a diagnostic audit (token + origin) |
+| GET | `/api/audit/{kind}/export?format=json\|csv&lang=&token=` | Download the audit report |
 
-WebSocket messages are `{"type": ..., "data": ...}`, where `type` is one of `snapshot`, `metrics`, `processes`, `netdiff` (`added`/`removed`/`changed`), `netstats`, `events`, `eventsummary` or `software`. Each client has a bounded queue, and a slow client is disconnected so it cannot stall the collectors.
+WebSocket messages are `{"type": ..., "data": ...}`, where `type` is one of `snapshot`, `metrics`, `processes`, `netdiff` (`added`/`removed`/`changed`), `netstats`, `events`, `eventsummary`, `software`, `radar`, `sweep`, `alert`, `alertcounts`, `alertsreset`, `audit` or `auditstate`. Each client has a bounded queue, and a slow client is disconnected so it cannot stall the collectors.
 
 ## Implementation notes
 
