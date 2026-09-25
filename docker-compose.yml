@@ -1,0 +1,60 @@
+# Tempora + Prometheus + a load generator.
+#   docker compose up -d --build            # engine + prometheus
+#   docker compose --profile load up -d     # also start the TCP load generator
+name: tempora
+
+services:
+  tempora:
+    build:
+      context: .
+      target: runtime
+      args:
+        VERSION: ${TEMPORA_VERSION:-dev}
+    image: tempora:${TEMPORA_VERSION:-dev}
+    env_file: .env.example
+    environment:
+      TEMPORA_WAL_DIR: /data/wal
+    ports:
+      - "8080:8080"   # HTTP API, ingest, /metrics
+      - "9090:9090"   # TCP NDJSON ingest
+    volumes:
+      - tempora-data:/data
+      - ./rules:/app/rules:ro
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      # distroless has no shell/curl: the binary probes its own /readyz.
+      test: ["CMD", "/usr/local/bin/tempora", "probe", "http://127.0.0.1:8080/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on: [tempora]
+    restart: unless-stopped
+
+  loadgen:
+    profiles: ["load"]
+    image: tempora:${TEMPORA_VERSION:-dev}
+    entrypoint: ["/usr/local/bin/tempora-bench"]
+    command: ["-target", "tempora:9090", "-rate", "20000", "-duration", "10m", "-producers", "2"]
+    depends_on: [tempora]
+
+volumes:
+  tempora-data:

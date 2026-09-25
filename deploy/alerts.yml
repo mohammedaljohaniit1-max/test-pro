@@ -1,0 +1,40 @@
+# Operational alerts for Tempora itself (not detection alerts).
+groups:
+  - name: tempora
+    rules:
+      - alert: TemporaBackpressure
+        expr: rate(tempora_events_backpressure_total[5m]) > 0 or rate(tempora_events_blocked_total[5m]) > 100
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Shard queues are saturated; add shards/CPU or reduce ingest rate"
+      - alert: TemporaLateEvents
+        expr: rate(tempora_events_late_total[5m]) / clamp_min(rate(tempora_events_processed_total[5m]), 1) > 0.01
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: ">1% of events arrive behind the watermark; raise TEMPORA_ALLOWED_LATENESS or fix producer clocks"
+      - alert: TemporaWatermarkStalled
+        expr: tempora_watermark_lag_seconds > 300
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Event-time watermark lags wall clock by >5m; absence rules are delayed"
+      - alert: TemporaSinkDropping
+        expr: rate(tempora_sink_dropped_total[5m]) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Alert sink {{ $labels.sink }} is dropping alerts"
+      - alert: TemporaKeyEvictions
+        expr: rate(tempora_key_evictions_total[10m]) > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Per-shard key cap reached; detection state is being evicted (raise TEMPORA_MAX_KEYS_PER_SHARD)"
+      - alert: TemporaEvalLatencyHigh
+        expr: tempora_eval_latency_seconds{quantile="0.99"} > 0.001
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p99 per-event evaluation latency above 1ms"
