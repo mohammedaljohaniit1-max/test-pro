@@ -92,3 +92,30 @@ func TestResolve(t *testing.T) {
 		t.Fatalf("unknown %q", n)
 	}
 }
+
+type inspReader struct{ fakeInspectBase }
+
+type fakeInspectBase struct{}
+
+func (fakeInspectBase) List() ([]RawProcess, error) {
+	return []RawProcess{{PID: 10, PPID: 1, Name: "parent.exe"}, {PID: 20, PPID: 10, Name: "child.exe"}, {PID: 30, PPID: 20, Name: "grand.exe"}}, nil
+}
+func (fakeInspectBase) Details(p *RawProcess) { p.Access = true; p.Path = `C:\x\` + p.Name }
+func (inspReader) Inspect(pid uint32) Inspection {
+	return Inspection{CommandLine: "child.exe --flag", User: `HOST\demo`, Handles: 42}
+}
+
+func TestInspect(t *testing.T) {
+	m := New(inspReader{}, 1)
+	if _, err := m.Sample(); err != nil {
+		t.Fatal(err)
+	}
+	d, ok := m.Inspect(20)
+	if !ok || d.ParentName != "parent.exe" || len(d.Children) != 1 || d.Children[0].PID != 30 ||
+		d.CommandLine != "child.exe --flag" || d.User != `HOST\demo` || d.Handles != 42 || d.Path != `C:\x\child.exe` {
+		t.Fatalf("%+v", d)
+	}
+	if _, ok := m.Inspect(999); ok {
+		t.Fatal("unknown pid found")
+	}
+}

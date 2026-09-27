@@ -56,7 +56,11 @@ func (s *Server) radarSelfTest(w http.ResponseWriter, r *http.Request) {
 		Ports int `json:"ports"`
 	}
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&req)
-	inc := s.Hub.RadarSelfTest(req.Ports)
+	inc, err := s.Hub.RadarSelfTest(req.Ports)
+	if err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"incident": inc, "remoteIp": hub.SelfTestIP})
 }
 

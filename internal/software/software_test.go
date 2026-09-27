@@ -3,6 +3,7 @@ package software
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/model"
 )
@@ -124,5 +125,38 @@ func TestCompareVersions(t *testing.T) {
 		if got := CompareVersions(c.a, c.b); got != c.want {
 			t.Errorf("CompareVersions(%q,%q)=%d want %d", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+func TestFilterAllDeepInventory(t *testing.T) {
+	kw := time.Date(2025, 3, 4, 12, 0, 0, 0, time.UTC)
+	raw := []RawEntry{
+		{Key: "k1", KeyName: "{23170F69-40C1-2702-2301-000001000000}", Scope: "machine", DisplayName: "7-Zip", DisplayVersion: "23.01", UninstallString: "MsiExec.exe /X{…}"},
+		{Key: "k2", Scope: "machine", DisplayName: "Hidden runtime", SystemComponent: 1, KeyWritten: kw},
+		{Key: "k3", Scope: "machine", DisplayName: "KB5030219", ParentKeyName: "Office"},
+		{Key: "k4", Scope: "user", DisplayName: "Spotify", QuietUninstall: "spotify /uninstall /silent", URLInfoAbout: "https://spotify.com", UserSID: "S-1-5-21-1"},
+	}
+	all := FilterAll(raw)
+	if len(all) != 4 {
+		t.Fatalf("%+v", all)
+	}
+	by := map[string]model.App{}
+	for _, a := range all {
+		by[a.Name] = a
+	}
+	if !by["7-Zip"].MSI || by["7-Zip"].Hidden || by["7-Zip"].Kind != "app" {
+		t.Fatalf("msi: %+v", by["7-Zip"])
+	}
+	if h := by["Hidden runtime"]; !h.Hidden || h.Kind != "system-component" || h.InstallDate != "2025-03-04" || h.DateSource != "key-write-time" {
+		t.Fatalf("hidden: %+v", h)
+	}
+	if u := by["KB5030219"]; u.Kind != "update" || !u.Hidden {
+		t.Fatalf("update: %+v", u)
+	}
+	if s := by["Spotify"]; s.Uninstall != "spotify /uninstall /silent" || s.URL == "" || s.UserSID == "" {
+		t.Fatalf("spotify: %+v", s)
+	}
+	if len(Filter(raw)) != 2 {
+		t.Fatal("Filter must keep hiding system components and updates")
 	}
 }

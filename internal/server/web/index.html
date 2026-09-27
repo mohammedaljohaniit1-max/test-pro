@@ -4,16 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="syspulse-token" content="{{TOKEN}}">
-<title>SysPulse 2.0 — Windows Observability &amp; Reliability Cockpit</title>
+<meta name="syspulse-mode" content="{{MODE}}">
+<title>SysPulse 3.0 — Windows Observability &amp; Reliability Cockpit</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <img src="/favicon.svg" alt="" width="28" height="28">
-    <span class="name">Sys<b>Pulse</b></span>
+    <svg class="ekg" viewBox="0 0 120 32" width="60" height="28" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="ekg-g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset=".25" stop-color="#22d3ee"/><stop offset="1" stop-color="#a5f3fc"/></linearGradient>
+        <clipPath id="ekg-clip"><rect x="0" y="0" width="120" height="32" rx="6"/></clipPath>
+      </defs>
+      <rect class="ekg-bg" x="0" y="0" width="120" height="32" rx="6"/>
+      <g clip-path="url(#ekg-clip)">
+        <g class="ekg-track">
+          <path class="ekg-line" d="M0 18 H14 l4-3 4 3 H30 l3 3 4-17 5 25 4-11 3 3 H62 l6-4 6 4 H74 M60 18 H74 l4-3 4 3 H90 l3 3 4-17 5 25 4-11 3 3 H122 l6-4 6 4 H134"/>
+        </g>
+        <circle class="ekg-dot" cx="0" cy="18" r="2.2"/>
+      </g>
+    </svg>
+    <span class="name neon" data-text="SysPulse">Sys<b>Pulse</b></span>
     <span class="ver">v{{VERSION}}</span>
+    <span class="mode-badge" id="mode-badge" hidden></span>
   </div>
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="overview" role="tab" data-i18n="tab.overview">Overview</button>
@@ -91,6 +105,21 @@
     </div>
     <div class="box">
       <div class="toolbar">
+        <h3><span data-i18n="dev.title">Local network devices</span> <span class="muted" id="dev-count"></span></h3>
+        <input id="dev-q" type="search" data-i18n-ph="dev.filter" placeholder="Filter by name, IP, MAC or vendor…">
+        <select id="dev-class"><option value="" data-i18n="dev.allClasses">All device types</option></select>
+        <button class="btn small" id="dev-resolve" data-i18n="dev.resolve">Resolve names</button>
+      </div>
+      <div class="dev-sum" id="dev-sum"></div>
+      <div class="tablewrap"><table class="grid" id="dev-table">
+        <thead><tr><th data-k="hostname" data-i18n="dev.col.device">Device</th><th data-k="ip" data-i18n="col.ip">IP address</th><th data-k="mac" data-i18n="col.mac">MAC address</th>
+          <th data-k="vendor" data-i18n="dev.col.vendor">Manufacturer</th><th data-k="class" data-i18n="dev.col.type">Type</th><th data-k="nameSource" data-i18n="dev.col.nameSrc">Name source</th>
+          <th data-k="interface" data-i18n="col.iface">Interface</th><th data-k="lastSeen" data-i18n="col.lastSeen">Last seen</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="dev-foot"></div>
+    </div>
+    <div class="box">
+      <div class="toolbar">
         <h3 data-i18n="net.active">Active sockets</h3>
         <input id="net-q" type="search" data-i18n-ph="net.filter" placeholder="Filter by process, address, port, state…">
         <select id="net-proto"><option value="" data-i18n="net.allProto">All protocols</option><option>TCP</option><option>TCP6</option><option>UDP</option><option>UDP6</option></select>
@@ -131,7 +160,7 @@
       <div class="toolbar"><h3 data-i18n="radar.hosts">Connection frequency &amp; port breadth per remote IP</h3>
         <input id="radar-q" type="search" data-i18n-ph="radar.filter" placeholder="Filter by IP or MAC…"></div>
       <div class="tablewrap"><table class="grid" id="radar-table">
-        <thead><tr><th data-i18n="col.remoteIp">Remote IP</th><th data-i18n="col.mac">MAC address</th><th data-i18n="col.iface">Interface</th>
+        <thead><tr><th data-i18n="col.remoteIp">Remote IP</th><th data-i18n="col.mac">MAC address</th><th data-i18n="dev.col.vendor">Manufacturer</th><th data-i18n="col.iface">Interface</th>
           <th class="num" data-i18n="col.portsWindow">Ports / window</th><th data-i18n="col.pressure">Rule pressure</th><th class="num" data-i18n="col.connsWindow">Attempts / window</th>
           <th class="num" data-i18n="col.rate">Rate (60 s)</th><th class="num" data-i18n="col.distinct">Distinct ports</th><th class="num" data-i18n="col.total">Total</th><th data-i18n="col.lastSeen">Last seen</th><th data-i18n="col.sensor">Sensor</th></tr></thead>
         <tbody></tbody></table></div>
@@ -145,9 +174,18 @@
       <div class="toolbar">
         <h3 data-i18n="proc.title">Processes</h3>
         <input id="proc-q" type="search" data-i18n-ph="proc.filter" placeholder="Filter by name, PID or path…">
+        <div class="chips" id="proc-chips" role="group">
+          <button class="chip active" data-pf="" data-i18n="proc.f.all">All</button>
+          <button class="chip hot" data-pf="cpu" data-i18n="proc.f.cpu">High CPU</button>
+          <button class="chip hot" data-pf="mem" data-i18n="proc.f.mem">High memory</button>
+          <button class="chip" data-pf="top" data-i18n="proc.f.top">Top 10 consumers</button>
+          <button class="chip" data-pf="denied" data-i18n="proc.f.denied">Protected</button>
+        </div>
+        <label class="chk"><span data-i18n="proc.cpuMin">CPU ≥</span> <select id="proc-cpu-min"><option value="1">1%</option><option value="5" selected>5%</option><option value="10">10%</option><option value="25">25%</option></select></label>
+        <label class="chk"><span data-i18n="proc.memMin">RAM ≥</span> <select id="proc-mem-min"><option value="104857600">100 MB</option><option value="268435456">256 MB</option><option value="536870912" selected>512 MB</option><option value="1073741824">1 GB</option></select></label>
       </div>
       <div class="tablewrap"><table class="grid" id="proc-table">
-        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="pid" class="num" data-i18n="col.pid">PID</th><th data-k="ppid" class="num" data-i18n="col.parent">Parent</th><th data-k="cpu" class="num" data-i18n="col.cpu">CPU %</th><th data-k="workingSet" class="num" data-i18n="col.ws">Working set</th><th data-k="private" class="num" data-i18n="col.private">Private</th><th data-k="threads" class="num" data-i18n="col.threads">Threads</th><th data-k="started" data-i18n="col.started">Started</th><th data-k="path" data-i18n="col.path">Path</th></tr></thead>
+        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="pid" class="num" data-i18n="col.pid">PID</th><th data-k="ppid" class="num" data-i18n="col.parent">Parent</th><th data-k="cpu" class="num" data-i18n="col.cpu">CPU %</th><th data-k="workingSet" class="num" data-i18n="col.ws">Working set</th><th data-k="private" class="num" data-i18n="col.private">Private</th><th data-k="threads" class="num" data-i18n="col.threads">Threads</th><th data-k="started" data-i18n="col.started">Started</th><th data-k="path" data-i18n="col.path">Path</th><th data-i18n="col.actions">Actions</th></tr></thead>
         <tbody></tbody></table></div>
       <div class="foot" id="proc-foot"></div>
     </div>
@@ -164,6 +202,24 @@
         <input id="ev-q" type="search" data-i18n-ph="ev.search" placeholder="Search source or message…">
         <select id="ev-level"><option value="" data-i18n="ev.allLevels">All levels</option><option value="critical" data-i18n="lvl.critical">Critical</option><option value="error" data-i18n="lvl.error">Error</option><option value="warning" data-i18n="lvl.warning">Warning</option><option value="info" data-i18n="lvl.info">Info</option></select>
         <select id="ev-cat"><option value="" data-i18n="ev.allCats">All categories</option></select>
+        <select id="ev-chan"><option value="" data-i18n="ev.allChannels">All channels</option><option value="System">System</option><option value="Application">Application</option></select>
+      </div>
+      <div class="toolbar sub">
+        <div class="chips" id="ev-lvl-chips" role="group">
+          <button class="chip critical" data-lv="critical"><span data-i18n="lvl.critical">Critical</span> <b class="cnt" id="evc-critical">0</b></button>
+          <button class="chip error" data-lv="error"><span data-i18n="lvl.error">Error</span> <b class="cnt" id="evc-error">0</b></button>
+          <button class="chip warning" data-lv="warning"><span data-i18n="lvl.warning">Warning</span> <b class="cnt" id="evc-warning">0</b></button>
+          <button class="chip info" data-lv="info"><span data-i18n="lvl.info">Info</span> <b class="cnt" id="evc-info">0</b></button>
+        </div>
+        <div class="chips" id="ev-range-chips" role="group">
+          <button class="chip" data-range="1" data-i18n="range.1h">1 h</button>
+          <button class="chip" data-range="24" data-i18n="range.24h">24 h</button>
+          <button class="chip" data-range="72" data-i18n="range.3d">3 days</button>
+          <button class="chip active" data-range="" data-i18n="range.all">All</button>
+        </div>
+        <label class="chk"><span data-i18n="range.from">From</span> <input type="datetime-local" id="ev-from"></label>
+        <label class="chk"><span data-i18n="range.to">To</span> <input type="datetime-local" id="ev-to"></label>
+        <button class="btn small ghost" id="ev-reset" data-i18n="filters.reset">Reset filters</button>
       </div>
       <div class="note" id="ev-err" hidden></div>
       <div class="tablewrap"><table class="grid" id="ev-table">
@@ -192,6 +248,30 @@
         <select id="diag-hours"><option value="24" data-i18n="diag.h24">24 hours</option><option value="168" selected data-i18n="diag.d7">7 days</option><option value="720" data-i18n="diag.d30">30 days</option></select></label>
     </div>
     <div id="diag-unavail" class="note" hidden data-i18n="diag.unavailable">Event-log audits need the Windows build of SysPulse.</div>
+    <div class="box diag-filter" id="diag-filter">
+      <div class="toolbar">
+        <h3 data-i18n="diag.filterTitle">Filter findings</h3>
+        <input id="diag-q" type="search" data-i18n-ph="diag.search" placeholder="Search account, component, diagnosis…">
+        <div class="chips" id="diag-sev-chips" role="group">
+          <button class="chip critical" data-dsev="critical"><span data-i18n="sev.critical">Critical</span> <b class="cnt" id="dc-critical">0</b></button>
+          <button class="chip warning" data-dsev="warning"><span data-i18n="sev.warning">Warning</span> <b class="cnt" id="dc-warning">0</b></button>
+          <button class="chip info" data-dsev="info"><span data-i18n="sev.info">Informational</span> <b class="cnt" id="dc-info">0</b></button>
+        </div>
+        <select id="diag-kind"><option value="" data-i18n="diag.allKinds">All finding types</option></select>
+      </div>
+      <div class="toolbar sub">
+        <div class="chips" id="diag-range-chips" role="group">
+          <button class="chip" data-drange="1" data-i18n="range.1h">1 h</button>
+          <button class="chip" data-drange="24" data-i18n="range.24h">24 h</button>
+          <button class="chip" data-drange="72" data-i18n="range.3d">3 days</button>
+          <button class="chip active" data-drange="" data-i18n="range.all">All</button>
+        </div>
+        <label class="chk"><span data-i18n="range.from">From</span> <input type="datetime-local" id="diag-from"></label>
+        <label class="chk"><span data-i18n="range.to">To</span> <input type="datetime-local" id="diag-to"></label>
+        <button class="btn small ghost" id="diag-reset" data-i18n="filters.reset">Reset filters</button>
+        <span class="spacer"></span><span class="muted small" id="diag-fcount"></span>
+      </div>
+    </div>
     <div id="diag-reports"></div>
   </section>
 
@@ -249,10 +329,14 @@
       <div class="toolbar">
         <h3><span data-i18n="sw.apps">Installed applications</span> <span class="muted" id="app-count"></span></h3>
         <input id="app-q" type="search" data-i18n-ph="sw.filter" placeholder="Filter by name or publisher…">
+        <select id="app-scope"><option value="" data-i18n="sw.allScopes">All scopes</option><option value="machine" data-i18n="scope.machine">Machine (64-bit)</option><option value="machine-x86" data-i18n="scope.machine-x86">Machine (32-bit)</option><option value="user" data-i18n="scope.user">Current user</option><option value="user-x86" data-i18n="scope.user-x86">Current user (32-bit)</option><option value="other-user" data-i18n="scope.other-user">Other users</option></select>
+        <select id="app-pub"><option value="" data-i18n="sw.allPublishers">All publishers</option></select>
         <label class="chk"><input type="checkbox" id="app-upd"> <span data-i18n="sw.onlyUpd">only with updates</span></label>
+        <label class="chk"><input type="checkbox" id="app-hidden"> <span data-i18n="sw.showHidden">include system components &amp; updates</span></label>
       </div>
+      <div class="sw-sum" id="sw-sum"></div>
       <div class="tablewrap"><table class="grid" id="app-table">
-        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="version" data-i18n="col.version">Version</th><th data-k="available" data-i18n="col.update">Update</th><th data-k="publisher" data-i18n="col.publisher">Publisher</th><th data-k="installDate" data-i18n="col.installedOn">Installed</th><th data-k="sizeKB" class="num" data-i18n="col.size">Size</th><th data-k="scope" data-i18n="col.scope">Scope</th></tr></thead>
+        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="version" data-i18n="col.version">Version</th><th data-k="available" data-i18n="col.update">Update</th><th data-k="publisher" data-i18n="col.publisher">Publisher</th><th data-k="installDate" data-i18n="col.installedOn">Installed</th><th data-k="sizeKB" class="num" data-i18n="col.size">Size</th><th data-k="arch" data-i18n="col.arch">Arch</th><th data-k="scope" data-i18n="col.scope">Scope</th></tr></thead>
         <tbody></tbody></table></div>
     </div>
   </section>

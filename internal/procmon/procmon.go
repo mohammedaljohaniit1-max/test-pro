@@ -198,3 +198,52 @@ func itoa(v uint32) string {
 	}
 	return string(b[i:])
 }
+
+// Inspection holds the on-demand, more expensive process details.
+type Inspection struct {
+	CommandLine string
+	User        string
+	Handles     uint32
+	Priority    string
+	Cwd         string
+	Extra       map[string]string
+	Errors      []string
+}
+
+// Inspector is implemented by readers that can deep-inspect one process.
+type Inspector interface {
+	Inspect(pid uint32) Inspection
+}
+
+// Inspect returns full details for pid: the latest sample row, parent name,
+// children and — when the reader supports it — command line, account,
+// handle count and priority. ok is false when pid is not running.
+func (m *Monitor) Inspect(pid uint32) (model.ProcessDetail, bool) {
+	m.mu.Lock()
+	last := m.last
+	m.mu.Unlock()
+	var d model.ProcessDetail
+	found := false
+	for _, p := range last {
+		if p.PID == pid {
+			d.Process, found = p, true
+			break
+		}
+	}
+	if !found {
+		return d, false
+	}
+	for _, p := range last {
+		if p.PID == d.PPID && p.PID != pid {
+			d.ParentName = p.Name
+		}
+		if p.PPID == pid && p.PID != pid {
+			d.Children = append(d.Children, p)
+		}
+	}
+	if in, ok := m.r.(Inspector); ok {
+		x := in.Inspect(pid)
+		d.CommandLine, d.User, d.Handles, d.Priority, d.Cwd, d.Extra, d.Errors = x.CommandLine, x.User, x.Handles, x.Priority, x.Cwd, x.Extra, x.Errors
+	}
+	return d, true
+}

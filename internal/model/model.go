@@ -148,6 +148,71 @@ type App struct {
 	// Filled in when a winget upgrade is known for this app.
 	AvailableVersion string `json:"available,omitempty"`
 	WingetID         string `json:"wingetId,omitempty"`
+
+	// SysPulse 3.0 deep inventory fields.
+	Hidden       bool   `json:"hidden,omitempty"`     // not shown in "Apps & features" (system component, update, child entry)
+	Kind         string `json:"kind,omitempty"`       // app, system-component, update, package
+	DateSource   string `json:"dateSource,omitempty"` // registry (InstallDate value), key-write-time, package-db
+	Arch         string `json:"arch,omitempty"`       // x64, x86, arm64, all…
+	MSI          bool   `json:"msi,omitempty"`        // Windows Installer product (key name is a product code)
+	Uninstall    string `json:"uninstall,omitempty"`  // UninstallString / QuietUninstallString
+	URL          string `json:"url,omitempty"`        // URLInfoAbout / Homepage
+	InstallSrc   string `json:"installSource,omitempty"`
+	Comments     string `json:"comments,omitempty"`
+	Source       string `json:"source,omitempty"` // registry, dpkg, rpm
+	UserSID      string `json:"userSid,omitempty"`
+	DisplayIcon  string `json:"icon,omitempty"`
+	Language     string `json:"language,omitempty"`
+	EstimatedRaw uint64 `json:"-"`
+}
+
+// Listener is one listening TCP socket (bound address and owning PID). The
+// radar's socket-table sensor uses it to decide whether a new row is an
+// accepted inbound connection.
+type Listener struct {
+	Addr string `json:"addr"`
+	PID  uint32 `json:"pid"`
+}
+
+// Device is one host discovered on the local network (ARP / neighbour table)
+// enriched with its hardware vendor and resolved host name.
+type Device struct {
+	IP         string            `json:"ip"`
+	MAC        string            `json:"mac"`
+	Vendor     string            `json:"vendor,omitempty"`     // brand, e.g. "Apple"
+	VendorFull string            `json:"vendorFull,omitempty"` // registered organisation name
+	OUI        string            `json:"oui,omitempty"`        // matched prefix
+	Registry   string            `json:"registry,omitempty"`   // MA-L / MA-M / MA-S
+	Class      string            `json:"class,omitempty"`      // pc, mobile, network, printer, iot, tv, console, vm, sbc
+	RandomMAC  bool              `json:"randomMac,omitempty"`  // locally administered / private address
+	Hostname   string            `json:"hostname,omitempty"`
+	NameSource string            `json:"nameSource,omitempty"` // netbios, mdns, dns
+	Names      map[string]string `json:"names,omitempty"`      // every name found, keyed by source
+	Workgroup  string            `json:"workgroup,omitempty"`
+	Interface  string            `json:"interface,omitempty"`
+	IfIndex    uint32            `json:"ifIndex,omitempty"`
+	Type       string            `json:"type,omitempty"` // dynamic, static, …
+	Gateway    bool              `json:"gateway,omitempty"`
+	Self       bool              `json:"self,omitempty"`
+	FirstSeen  int64             `json:"firstSeen"`
+	LastSeen   int64             `json:"lastSeen"`
+	Resolved   int64             `json:"resolved,omitempty"` // unix ms of the last name lookup
+	Resolving  bool              `json:"resolving,omitempty"`
+}
+
+// ProcessDetail is the on-demand deep inspection of one process.
+type ProcessDetail struct {
+	Process
+	CommandLine string            `json:"commandLine,omitempty"`
+	User        string            `json:"user,omitempty"`
+	Handles     uint32            `json:"handles,omitempty"` // Windows handles / Linux open file descriptors
+	Priority    string            `json:"priority,omitempty"`
+	Cwd         string            `json:"cwd,omitempty"`
+	ParentName  string            `json:"parentName,omitempty"`
+	Children    []Process         `json:"children,omitempty"`
+	Sockets     []Connection      `json:"sockets,omitempty"`
+	Extra       map[string]string `json:"extra,omitempty"`
+	Errors      []string          `json:"errors,omitempty"`
 }
 
 // Upgrade is one row of `winget upgrade`.

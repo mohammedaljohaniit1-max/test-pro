@@ -184,6 +184,7 @@ code { font-family: var(--mono); font-size: 12.5px; background: #0a1122; border:
   background: repeating-linear-gradient(135deg, #b91c1c 0 18px, #9f1239 18px 36px);
   box-shadow: 0 8px 30px rgba(190, 18, 60, .45);
 }
+.sweep-banner[hidden] { display: none; }
 .sweep-banner.pulse { animation: sbpulse 1.2s ease 3; }
 @keyframes sbpulse { 0%, 100% { filter: none; } 50% { filter: brightness(1.35); } }
 .sb-icon { font-size: 34px; line-height: 1; animation: blink 1s steps(2, start) infinite; }
@@ -347,3 +348,83 @@ html[dir="rtl"] .modal-foot { justify-content: flex-start; }
 html[dir="rtl"] table.grid th.sorted-asc::after, html[dir="rtl"] table.grid th.sorted-desc::after { margin-right: 4px; }
 .mono, td.mono, .cmd, pre { unicode-bidi: plaintext; }
 bdi { unicode-bidi: isolate; }
+
+/* ======================================================================
+   SysPulse 3.0 — cyber-aesthetic branding
+   ====================================================================== */
+/* Pulsating cyan neon glow on the brand name. Two text-shadow layers
+   breathe at a heart-rate cadence; a faint flicker keeps it "electric". */
+.brand .name.neon {
+  font-weight: 700; font-size: 20px; letter-spacing: .8px; color: #cffafe;
+  text-shadow: 0 0 2px #fff, 0 0 6px #22d3ee, 0 0 12px #22d3ee, 0 0 24px #0891b2;
+  animation: neon-pulse 2.4s ease-in-out infinite, neon-flicker 7s steps(1, end) infinite;
+  will-change: text-shadow, opacity;
+}
+.brand .name.neon b {
+  background: none; -webkit-background-clip: initial; background-clip: initial;
+  color: #67e8f9; font-weight: 800;
+}
+@keyframes neon-pulse {
+  0%, 100% { text-shadow: 0 0 2px #fff, 0 0 5px #22d3ee, 0 0 10px #22d3ee, 0 0 18px rgba(8,145,178,.7); }
+  12%      { text-shadow: 0 0 3px #fff, 0 0 10px #22d3ee, 0 0 22px #22d3ee, 0 0 42px #06b6d4, 0 0 64px rgba(34,211,238,.55); }
+  24%      { text-shadow: 0 0 2px #fff, 0 0 6px #22d3ee, 0 0 12px #22d3ee, 0 0 24px rgba(8,145,178,.8); }
+  36%      { text-shadow: 0 0 3px #fff, 0 0 9px #22d3ee, 0 0 20px #22d3ee, 0 0 36px #06b6d4, 0 0 54px rgba(34,211,238,.45); }
+}
+@keyframes neon-flicker {
+  0%, 100% { opacity: 1; } 91% { opacity: 1; } 91.5% { opacity: .72; } 92% { opacity: 1; } 93% { opacity: .85; } 93.4% { opacity: 1; }
+}
+
+/* Continuous EKG monitor: two identical waveform periods are drawn side
+   by side and translated by exactly one period, so the loop is seamless.
+   A glowing "write head" dot rides the leading edge. */
+.ekg { display: block; overflow: visible; filter: drop-shadow(0 0 4px rgba(34,211,238,.65)); flex: none; }
+.ekg-bg { fill: rgba(8, 47, 73, .55); stroke: rgba(34, 211, 238, .35); stroke-width: 1; }
+.ekg-line { fill: none; stroke: url(#ekg-g); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.ekg-track { animation: ekg-scroll 1.6s linear infinite; }
+@keyframes ekg-scroll { from { transform: translateX(0); } to { transform: translateX(-60px); } }
+.ekg-dot { fill: #ecfeff; filter: drop-shadow(0 0 3px #22d3ee); transform: translateX(104px); animation: ekg-beat 1.6s linear infinite; }
+@keyframes ekg-beat {
+  0%, 100% { transform: translate(104px, 0); }
+  40% { transform: translate(104px, 0); } 45% { transform: translate(104px, -11px); } 50% { transform: translate(104px, 8px); } 55% { transform: translate(104px, 0); }
+}
+html[dir="rtl"] .ekg { transform: scaleX(-1); } /* waveform flows toward the reading direction */
+@media (prefers-reduced-motion: reduce) {
+  .ekg-track, .ekg-dot, .brand .name.neon { animation: none; }
+}
+
+.mode-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.mode-badge.live { color: #a7f3d0; background: rgba(16,185,129,.14); border: 1px solid rgba(52,211,153,.45); }
+.mode-badge.sim { color: #fde68a; background: rgba(245,158,11,.18); border: 1px solid rgba(251,191,36,.6); animation: blink 1.4s steps(2, start) infinite; }
+
+/* ---- shared 3.0 components ---- */
+.offscreen { position: fixed; left: -9999px; top: 0; opacity: 0; }
+.chip .cnt { font-weight: 700; margin-inline-start: 4px; font-variant-numeric: tabular-nums; }
+.chip.error.active { border-color: var(--red); background: rgba(248,113,113,.2); }
+.chip.info.active { border-color: var(--cyan); background: rgba(34,211,238,.15); }
+.chip.hot.active { border-color: #fb923c; background: rgba(251,146,60,.18); }
+input[type=datetime-local] { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; color-scheme: dark; }
+input[type=datetime-local]:focus { outline: none; border-color: var(--cyan); }
+.iconbtn.sm { font-size: 13px; padding: 2px 7px; margin-inline-end: 4px; }
+td.acts { white-space: nowrap; }
+tr.hotrow td:first-child { box-shadow: inset 3px 0 0 #fb923c; }
+html[dir="rtl"] tr.hotrow td:first-child { box-shadow: inset -3px 0 0 #fb923c; }
+.hot-t { color: #fdba74; font-weight: 600; }
+#proc-table tbody tr, #dev-table tbody tr, #app-table tbody tr { cursor: pointer; }
+tr.dimrow { opacity: .62; }
+code.wrap { white-space: pre-wrap; word-break: break-all; display: inline-block; max-width: 100%; }
+h4.mh { margin: 14px 0 6px; font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+ul.kids { margin: 0; padding-inline-start: 18px; font-size: 13px; }
+.pill.gw { background: rgba(167,139,250,.2); color: #ddd6fe; }
+
+/* ---- devices ---- */
+.dev-sum, .sw-sum { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -2px 0 10px; }
+.dchip { background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 14px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.dchip:hover, .dchip.sel { border-color: var(--cyan); background: #11304a; }
+.dchip b { color: var(--cyan); margin-inline-start: 2px; }
+.dev-stats { margin-inline-start: auto; }
+.dicon { display: inline-block; width: 20px; text-align: center; }
+.swchip { background: #0d1528; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px; font-size: 12.5px; }
+.swchip b { color: var(--cyan); }
+.diag-filter[hidden] { display: none; }
+html[dir="rtl"] .dev-stats { margin-inline-start: auto; margin-right: auto; }
+html[dir="rtl"] input[type=datetime-local] { direction: ltr; }

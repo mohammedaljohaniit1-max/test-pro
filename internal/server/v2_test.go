@@ -89,7 +89,7 @@ func TestRadarSelfTestRaisesAlertAndStreams(t *testing.T) {
 
 func TestAlertExportRequiresTokenAndAck(t *testing.T) {
 	e := newEnv(t)
-	e.srv.Hub.RadarSelfTest(0)
+	_, _ = e.srv.Hub.RadarSelfTest(0)
 	if code, _, _ := e.req(t, "GET", "/api/alerts/export?format=csv", "", nil); code != http.StatusForbidden {
 		t.Fatalf("export without token: %d", code)
 	}
@@ -164,5 +164,17 @@ func TestSnapshotIncludesV2State(t *testing.T) {
 		if _, ok := m[k]; !ok {
 			t.Errorf("snapshot missing %s", k)
 		}
+	}
+}
+
+// In live mode (the default for syspulse.exe) synthetic incidents must be
+// impossible: the self-test endpoint is refused and nothing is injected.
+func TestSelfTestDisabledInLiveMode(t *testing.T) {
+	h := hub.New(hub.Config{Channels: []string{"System"}}, nil, nil, nil, nil, nil)
+	if _, err := h.RadarSelfTest(24); err != hub.ErrSelfTestDisabled {
+		t.Fatalf("self-test allowed in live mode: %v", err)
+	}
+	if len(h.Radar().Incidents()) != 0 || h.SelfTestEnabled() {
+		t.Fatal("synthetic incident injected")
 	}
 }

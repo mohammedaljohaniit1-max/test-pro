@@ -208,17 +208,42 @@ func TestParseInboundSYN(t *testing.T) {
 }
 
 func TestFromConnections(t *testing.T) {
-	listen := map[string]bool{ListenKey("TCP", 445): true, ListenKey("TCP6", 3389): true}
+	listen := map[string][]model.Listener{
+		ListenKey("TCP", 445):   {{Addr: "0.0.0.0", PID: 4}},
+		ListenKey("TCP6", 3389): {{Addr: "::", PID: 900}},
+		ListenKey("TCP", 51500): {{Addr: "127.0.0.1", PID: 777}}, // loopback-only IPC listener
+	}
 	added := []model.Connection{
-		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 445, RemoteAddr: "192.168.1.66", RemotePort: 51000, State: "ESTABLISHED", FirstSeen: 1},
-		{Proto: "TCP6", LocalAddr: "fe80::1", LocalPort: 3389, RemoteAddr: "fe80::9", RemotePort: 51001, State: "ESTABLISHED"},
+		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 445, RemoteAddr: "192.168.1.66", RemotePort: 51000, State: "ESTABLISHED", PID: 4, FirstSeen: 1},
+		{Proto: "TCP6", LocalAddr: "fe80::1", LocalPort: 3389, RemoteAddr: "fe80::9", RemotePort: 51001, State: "ESTABLISHED", PID: 900},
 		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 7777, RemoteAddr: "192.168.1.66", RemotePort: 51002, State: "SYN_RECEIVED"},
 		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 52000, RemoteAddr: "142.250.1.1", RemotePort: 443, State: "ESTABLISHED"}, // outbound
 		{Proto: "TCP", LocalAddr: "0.0.0.0", LocalPort: 445, State: "LISTEN"},
 		{Proto: "UDP", LocalAddr: "0.0.0.0", LocalPort: 53},
+		// Browser ephemeral port colliding with a loopback-only listener: not inbound.
+		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 51500, RemoteAddr: "151.101.1.69", RemotePort: 8443, State: "ESTABLISHED", PID: 4012, ProcessName: "chrome.exe"},
+		// Same collision from an unknown process: address mismatch keeps it out.
+		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 51500, RemoteAddr: "10.0.0.5", RemotePort: 7000, State: "ESTABLISHED", PID: 12},
+		// A browser row in SYN_RECEIVED is still dropped (client process).
+		{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: 9222, RemoteAddr: "10.0.0.5", RemotePort: 7001, State: "SYN_RECEIVED", ProcessName: "Chrome.exe"},
 	}
-	got := FromConnections(added, listen)
+	got := FromConnections(added, listen, NewTableOptions())
 	if len(got) != 3 || got[0].LocalPort != 445 || got[0].Sensor != SensorTable || got[2].LocalPort != 7777 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// A browser with dozens of tabs opens many outbound sockets in a burst; the
+// table sensor must never turn them into observations.
+func TestBrowserBurstNeverObserved(t *testing.T) {
+	listen := map[string][]model.Listener{}
+	var added []model.Connection
+	for i := 0; i < 200; i++ {
+		added = append(added, model.Connection{Proto: "TCP", LocalAddr: "192.168.1.42", LocalPort: uint16(50000 + i),
+			RemoteAddr: "142.250.185.78", RemotePort: uint16([]int{443, 80, 8443, 5228}[i%4]), State: "SYN_SENT", PID: 4012, ProcessName: "msedge.exe"})
+		listen[ListenKey("TCP", uint16(50000+i))] = []model.Listener{{Addr: "127.0.0.1", PID: 99}}
+	}
+	if got := FromConnections(added, listen, NewTableOptions()); len(got) != 0 {
+		t.Fatalf("browser burst produced %d observations", len(got))
 	}
 }

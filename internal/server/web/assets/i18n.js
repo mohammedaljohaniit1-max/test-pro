@@ -1,4 +1,4 @@
-/* SysPulse 2.0 — bilingual dictionary (English / Arabic).
+/* SysPulse 3.0 — bilingual dictionary (English / Arabic).
  * Static markup uses data-i18n (textContent), data-i18n-ph (placeholder) and
  * data-i18n-title (title). Dynamic strings use I18N.t(key, vars).
  * Interpolation: "{name}" is replaced by vars.name. */
@@ -119,6 +119,48 @@
       "ago.s": "{n}s ago", "ago.m": "{n}m ago", "ago.h": "{n}h ago", "ago.d": "{n}d ago",
       "btn.ok": "OK", "btn.cancel": "Cancel", "btn.close": "Close", "btn.confirm": "Confirm",
       "err.generic": "Request failed: {e}",
+      // ---- SysPulse 3.0 ----
+      "mode.live": "LIVE HOST DATA", "mode.synthetic": "SIMULATED DATA",
+      "mode.liveTip": "Every value on this dashboard comes from the physical host. No synthetic traffic generator is running.",
+      "mode.syntheticTip": "Started with -synthetic: all telemetry is simulated for UI review. Never use this mode for monitoring.",
+      "col.actions": "Actions", "col.arch": "Arch", "col.ip": "IP address",
+      "act.copyPath": "Copy process diagnostic path", "act.inspect": "Inspect details", "act.copyDiag": "Copy full diagnostic block",
+      "act.copyIp": "Copy IP", "act.copyMac": "Copy MAC", "act.copied": "Copied to clipboard", "act.copyFailed": "Clipboard not available",
+      "act.pathCopied": "Process path copied to clipboard", "act.diagCopied": "Diagnostic block copied to clipboard",
+      "dev.title": "Local network devices", "dev.filter": "Filter by name, IP, MAC or vendor…", "dev.allClasses": "All device types",
+      "dev.resolve": "Resolve names", "dev.count": "({n} of {total})", "dev.col.device": "Device", "dev.col.vendor": "Manufacturer",
+      "dev.col.type": "Type", "dev.col.nameSrc": "Name source", "dev.noName": "no name advertised", "dev.resolving": "resolving…",
+      "dev.none": "No neighbours in the ARP table yet. Devices appear as soon as this host exchanges traffic with them.",
+      "dev.private": "private (randomised) MAC", "dev.unknownVendor": "unregistered OUI", "dev.gateway": "gateway",
+      "dev.randomTip": "Locally administered address: phones and laptops with 'Private Wi-Fi address' enabled rotate their MAC, so no manufacturer can be derived.",
+      "dev.stats": "{v} of {total} matched to a manufacturer · {n} names resolved",
+      "dev.foot": "Vendors from the embedded IEEE OUI registry (MA-L / MA-M / MA-S, longest-prefix match). Names from NetBIOS node status, mDNS reverse lookup and reverse DNS — only the device itself is queried.",
+      "dev.resolvingToast": "Resolving names for {n} devices…", "dev.vendorFull": "Registered organisation", "dev.oui": "OUI prefix",
+      "dev.workgroup": "Workgroup / domain", "dev.resolvedAt": "Name resolved", "dev.allNames": "Names by source",
+      "dclass.pc": "Computer", "dclass.mobile": "Phone / tablet", "dclass.network": "Router / network", "dclass.printer": "Printer",
+      "dclass.iot": "Smart home / IoT", "dclass.tv": "TV / media", "dclass.console": "Game console", "dclass.vm": "Virtual machine",
+      "dclass.sbc": "Single-board computer", "dclass.unknown": "Unknown",
+      "nsrc.netbios": "NetBIOS", "nsrc.mdns": "mDNS (Bonjour)", "nsrc.dns": "Reverse DNS",
+      "proc.f.all": "All", "proc.f.cpu": "High CPU", "proc.f.mem": "High memory", "proc.f.top": "Top 10 consumers", "proc.f.denied": "Protected",
+      "proc.cpuMin": "CPU ≥", "proc.memMin": "RAM ≥", "proc.none": "No process matches the current filter.",
+      "proc.cmdline": "Command line", "proc.user": "Account", "proc.handles": "Handles / open files", "proc.priority": "Priority",
+      "proc.cwd": "Working directory", "proc.ioRead": "Disk read", "proc.ioWrite": "Disk written", "proc.elevated": "Elevated", "proc.yes": "yes",
+      "proc.children": "Child processes ({n})", "proc.sockets": "Sockets ({n})", "proc.partial": "Some details are restricted",
+      "ev.allChannels": "All channels", "ev.none": "No events match the current filters.",
+      "range.1h": "1 h", "range.24h": "24 h", "range.3d": "3 days", "range.all": "All", "range.from": "From", "range.to": "To",
+      "filters.reset": "Reset filters",
+      "diag.filterTitle": "Filter findings", "diag.search": "Search account, component, diagnosis…", "diag.allKinds": "All finding types",
+      "diag.fcount": "{n} of {total} findings shown", "diag.noneMatch": "No findings match the current filters.",
+      "sw.allScopes": "All scopes", "sw.allPublishers": "All publishers", "sw.showHidden": "include system components & updates",
+      "sw.none": "No installed software matches the current filter.", "sw.sumApps": "applications",
+      "sw.sumHidden": "{n} system components / updates hidden", "sw.sumMsi": "{n} Windows Installer (MSI) products",
+      "sw.copyKey": "Copy registry key", "sw.copyUninstall": "Copy uninstall command", "sw.kind": "Entry type", "sw.location": "Install location",
+      "sw.source": "Install source", "sw.uninstall": "Uninstall command", "sw.url": "Website", "sw.key": "Registry key", "sw.sid": "User SID",
+      "sw.comments": "Description",
+      "scope.machine": "Machine (64-bit)", "scope.machine-x86": "Machine (32-bit)", "scope.user": "Current user",
+      "scope.user-x86": "Current user (32-bit)", "scope.other-user": "Other users",
+      "kind2.app": "application", "kind2.system-component": "system component", "kind2.update": "update", "kind2.package": "package",
+      "dsrc.registry": "InstallDate value", "dsrc.key-write-time": "* estimated from the registry key's last-write time", "dsrc.package-db": "package database",
     },
 
     ar: {
@@ -235,6 +277,48 @@
       "ago.s": "قبل {n} ث", "ago.m": "قبل {n} د", "ago.h": "قبل {n} س", "ago.d": "قبل {n} يوم",
       "btn.ok": "موافق", "btn.cancel": "إلغاء", "btn.close": "إغلاق", "btn.confirm": "تأكيد",
       "err.generic": "فشل الطلب: {e}",
+      // ---- SysPulse 3.0 ----
+      "mode.live": "بيانات حيّة من الجهاز", "mode.synthetic": "بيانات محاكاة",
+      "mode.liveTip": "كل قيمة في هذه اللوحة مصدرها الجهاز الفعلي. لا يعمل أي مولّد حركة اصطناعية.",
+      "mode.syntheticTip": "تم التشغيل بخيار ‎-synthetic‎: جميع البيانات محاكاة لمراجعة الواجهة فقط. لا تستخدم هذا الوضع للمراقبة.",
+      "col.actions": "الإجراءات", "col.arch": "المعمارية", "col.ip": "عنوان IP",
+      "act.copyPath": "نسخ مسار العملية التشخيصي", "act.inspect": "عرض التفاصيل", "act.copyDiag": "نسخ كتلة التشخيص كاملة",
+      "act.copyIp": "نسخ العنوان", "act.copyMac": "نسخ MAC", "act.copied": "تم النسخ إلى الحافظة", "act.copyFailed": "الحافظة غير متاحة",
+      "act.pathCopied": "تم نسخ مسار العملية", "act.diagCopied": "تم نسخ كتلة التشخيص",
+      "dev.title": "أجهزة الشبكة المحلية", "dev.filter": "تصفية حسب الاسم أو العنوان أو MAC أو الشركة المصنّعة…", "dev.allClasses": "كل أنواع الأجهزة",
+      "dev.resolve": "تحديد الأسماء", "dev.count": "({n} من {total})", "dev.col.device": "الجهاز", "dev.col.vendor": "الشركة المصنّعة",
+      "dev.col.type": "النوع", "dev.col.nameSrc": "مصدر الاسم", "dev.noName": "لا يعلن عن اسم", "dev.resolving": "جارٍ التحديد…",
+      "dev.none": "لا يوجد جيران في جدول ARP بعد. تظهر الأجهزة فور تبادل هذا الجهاز حركة مرور معها.",
+      "dev.private": "عنوان MAC خاص (عشوائي)", "dev.unknownVendor": "بادئة OUI غير مسجّلة", "dev.gateway": "البوابة",
+      "dev.randomTip": "عنوان مُدار محليًا: الهواتف والحواسيب التي فعّلت «عنوان Wi-Fi خاص» تغيّر عنوانها، لذا لا يمكن تحديد الشركة المصنّعة.",
+      "dev.stats": "{v} من {total} معروفة الشركة المصنّعة · تم تحديد {n} اسم",
+      "dev.foot": "الشركات المصنّعة من سجل IEEE OUI المضمّن (MA-L / MA-M / MA-S، أطول بادئة مطابقة). الأسماء من NetBIOS و mDNS و DNS العكسي — يُستعلم الجهاز نفسه فقط.",
+      "dev.resolvingToast": "جارٍ تحديد أسماء {n} جهاز…", "dev.vendorFull": "الجهة المسجّلة", "dev.oui": "بادئة OUI",
+      "dev.workgroup": "مجموعة العمل / النطاق", "dev.resolvedAt": "وقت تحديد الاسم", "dev.allNames": "الأسماء حسب المصدر",
+      "dclass.pc": "حاسوب", "dclass.mobile": "هاتف / جهاز لوحي", "dclass.network": "موجّه / شبكة", "dclass.printer": "طابعة",
+      "dclass.iot": "منزل ذكي / إنترنت الأشياء", "dclass.tv": "تلفاز / وسائط", "dclass.console": "جهاز ألعاب", "dclass.vm": "آلة افتراضية",
+      "dclass.sbc": "حاسوب لوحة واحدة", "dclass.unknown": "غير معروف",
+      "nsrc.netbios": "NetBIOS", "nsrc.mdns": "mDNS ‏(Bonjour)", "nsrc.dns": "DNS العكسي",
+      "proc.f.all": "الكل", "proc.f.cpu": "استهلاك معالج مرتفع", "proc.f.mem": "استهلاك ذاكرة مرتفع", "proc.f.top": "أعلى 10 استهلاكًا", "proc.f.denied": "محمية",
+      "proc.cpuMin": "المعالج ≥", "proc.memMin": "الذاكرة ≥", "proc.none": "لا توجد عملية مطابقة للتصفية الحالية.",
+      "proc.cmdline": "سطر الأوامر", "proc.user": "الحساب", "proc.handles": "المقابض / الملفات المفتوحة", "proc.priority": "الأولوية",
+      "proc.cwd": "مجلد العمل", "proc.ioRead": "قراءة القرص", "proc.ioWrite": "الكتابة على القرص", "proc.elevated": "بصلاحيات مرتفعة", "proc.yes": "نعم",
+      "proc.children": "العمليات الفرعية ({n})", "proc.sockets": "المقابس ({n})", "proc.partial": "بعض التفاصيل مقيّدة",
+      "ev.allChannels": "كل القنوات", "ev.none": "لا توجد أحداث مطابقة للتصفية الحالية.",
+      "range.1h": "ساعة", "range.24h": "24 ساعة", "range.3d": "3 أيام", "range.all": "الكل", "range.from": "من", "range.to": "إلى",
+      "filters.reset": "إعادة ضبط التصفية",
+      "diag.filterTitle": "تصفية النتائج", "diag.search": "ابحث في الحساب أو المكوّن أو التشخيص…", "diag.allKinds": "كل أنواع النتائج",
+      "diag.fcount": "عرض {n} من {total} نتيجة", "diag.noneMatch": "لا توجد نتائج مطابقة للتصفية الحالية.",
+      "sw.allScopes": "كل النطاقات", "sw.allPublishers": "كل الناشرين", "sw.showHidden": "تضمين مكوّنات النظام والتحديثات",
+      "sw.none": "لا توجد برامج مثبّتة مطابقة للتصفية.", "sw.sumApps": "تطبيق",
+      "sw.sumHidden": "{n} مكوّن نظام / تحديث مخفي", "sw.sumMsi": "{n} منتج Windows Installer ‏(MSI)",
+      "sw.copyKey": "نسخ مفتاح السجل", "sw.copyUninstall": "نسخ أمر الإزالة", "sw.kind": "نوع الإدخال", "sw.location": "مسار التثبيت",
+      "sw.source": "مصدر التثبيت", "sw.uninstall": "أمر الإزالة", "sw.url": "الموقع", "sw.key": "مفتاح السجل", "sw.sid": "معرّف المستخدم SID",
+      "sw.comments": "الوصف",
+      "scope.machine": "الجهاز (64 بت)", "scope.machine-x86": "الجهاز (32 بت)", "scope.user": "المستخدم الحالي",
+      "scope.user-x86": "المستخدم الحالي (32 بت)", "scope.other-user": "مستخدمون آخرون",
+      "kind2.app": "تطبيق", "kind2.system-component": "مكوّن نظام", "kind2.update": "تحديث", "kind2.package": "حزمة",
+      "dsrc.registry": "قيمة InstallDate", "dsrc.key-write-time": "* تقدير من آخر وقت كتابة لمفتاح السجل", "dsrc.package-db": "قاعدة بيانات الحزم",
     },
   };
 
@@ -264,7 +348,7 @@
     html.lang = lang;
     html.dir = lang === "ar" ? "rtl" : "ltr";
     document.body.classList.toggle("rtl", lang === "ar");
-    document.title = lang === "ar" ? "SysPulse 2.0 — لوحة مراقبة وموثوقية Windows" : "SysPulse 2.0 — Windows Observability & Reliability Cockpit";
+    document.title = lang === "ar" ? "SysPulse 3.0 — لوحة مراقبة وموثوقية Windows" : "SysPulse 3.0 — Windows Observability & Reliability Cockpit";
     apply();
     listeners.forEach((fn) => fn(lang));
   }

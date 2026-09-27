@@ -44,11 +44,16 @@ type v2 struct {
 	audits       map[string]model.AuditReport
 	auditRunning map[string]bool
 	radarTick    int
+
+	tableOpt radar.TableOptions
+	devices  *devices
 }
 
 func (h *Hub) initV2() {
 	h.radar = radar.New(radar.Config{Window: h.cfg.RadarWindow, Threshold: h.cfg.RadarThreshold,
 		Cooldown: h.cfg.RadarCooldown, Allow: h.cfg.RadarAllow})
+	h.tableOpt = radar.NewTableOptions(h.cfg.ClientProcs...)
+	h.devices = newDevices()
 	h.alerts = alerts.New(h.cfg.AlertsMax, 10*time.Minute)
 	h.resHigh = map[string]int{}
 	h.resActive = map[string]bool{}
@@ -181,7 +186,7 @@ func sweepDetail(inc radar.Incident) model.Text {
 
 func sweepFields(inc radar.Incident) map[string]string {
 	f := map[string]string{
-		"incident": inc.ID, "remoteIp": inc.RemoteIP, "mac": inc.MAC, "interface": inc.Interface,
+		"incident": inc.ID, "remoteIp": inc.RemoteIP, "mac": inc.MAC, "vendor": inc.Vendor, "interface": inc.Interface,
 		"portRange": inc.PortRange, "distinctPorts": strconv.Itoa(inc.DistinctPorts),
 		"portMin": strconv.Itoa(int(inc.PortMin)), "portMax": strconv.Itoa(int(inc.PortMax)),
 		"attempts": strconv.Itoa(inc.Attempts), "sensor": inc.Sensor,
@@ -200,12 +205,12 @@ func sweepFields(inc radar.Incident) map[string]string {
 // The very first poll lists every pre-existing socket and is skipped. When
 // the raw SYN sensor is running it already sees every IPv4 attempt, so only
 // IPv6 rows are taken from the table to avoid double counting.
-func (h *Hub) feedTableSensor(d netmon.Diff, listening map[string]bool) {
+func (h *Hub) feedTableSensor(d netmon.Diff, listening map[string][]model.Listener) {
 	h.netPolls++
 	if h.netPolls <= 1 || len(d.Added) == 0 {
 		return
 	}
-	obs := radar.FromConnections(d.Added, listening)
+	obs := radar.FromConnections(d.Added, listening, h.tableOpt)
 	if h.radar.SensorActive(radar.SensorRaw) {
 		kept := obs[:0]
 		for _, o := range obs {
@@ -228,19 +233,35 @@ func (h *Hub) radarTickFn() {
 		h.lastARP = time.Now()
 		if ns, err := h.rplat.Neighbors(); err == nil {
 			h.radar.SetNeighbors(ns)
+			if lp, ok := h.rplat.(radar.LocalLister); ok {
+				locals := lp.LocalIPv4()
+				ips := make([]string, 0, len(locals))
+				for _, l := range locals {
+					ips = append(ips, l.IP)
+				}
+				h.radar.SetLocal(ips)
+			}
+			h.updateDevices(ns)
 		} else {
 			h.log.Debug("ARP table read failed", "err", err)
 		}
 	}
 	if h.Subscribers() > 0 {
 		h.Broadcast("radar", h.radar.Snapshot(100))
+		h.radarTick++
+		if h.radarTick%5 == 0 {
+			h.Broadcast("devices", h.Devices())
+		}
 	}
 }
 
 // RadarSelfTest injects a synthetic sweep from SelfTestIP through the full
 // pipeline (detector → alert → dashboard banner and chime → attribution).
 // ports is the number of distinct ports to "touch" (default 24).
-func (h *Hub) RadarSelfTest(ports int) radar.Incident {
+func (h *Hub) RadarSelfTest(ports int) (radar.Incident, error) {
+	if !h.cfg.SelfTest {
+		return radar.Incident{}, ErrSelfTestDisabled
+	}
 	if ports <= h.radar.Config().Threshold {
 		ports = h.radar.Config().Threshold + 14
 	}
@@ -257,9 +278,9 @@ func (h *Hub) RadarSelfTest(ports int) radar.Incident {
 	incs := h.radar.Observe(obs...)
 	h.handleIncidents(incs)
 	for _, inc := range incs {
-		return inc
+		return inc, nil
 	}
-	return radar.Incident{}
+	return radar.Incident{}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +411,13 @@ func (h *Hub) resourceAlerts(m model.SystemMetrics) {
 // Audits
 // ---------------------------------------------------------------------------
 
+// ErrSelfTestDisabled is returned when the synthetic radar self-test is
+// requested while running in live-telemetry-only mode.
+var ErrSelfTestDisabled = errors.New("the synthetic radar self-test is disabled in live mode (start with -enable-selftest to allow it)")
+
+// SelfTestEnabled reports whether synthetic self-test incidents may be injected.
+func (h *Hub) SelfTestEnabled() bool { return h.cfg.SelfTest }
+
 // ErrAuditBusy is returned when the same audit is already running.
 var ErrAuditBusy = errors.New("audit already running")
 
@@ -484,3 +512,18 @@ func alertsFilter(limit int) alerts.Filter { return alerts.Filter{Limit: limit} 
 
 // Metrics returns the latest system sample.
 func (h *Hub) Metrics() model.SystemMetrics { return h.sys.Last() }
+
+// InspectProcess returns deep details for one running process together
+// with the sockets it owns.
+func (h *Hub) InspectProcess(pid uint32) (model.ProcessDetail, bool) {
+	d, ok := h.procs.Inspect(pid)
+	if !ok {
+		return d, false
+	}
+	for _, c := range h.Connections() {
+		if c.PID == pid {
+			d.Sockets = append(d.Sockets, c)
+		}
+	}
+	return d, true
+}

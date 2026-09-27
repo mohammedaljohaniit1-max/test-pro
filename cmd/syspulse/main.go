@@ -1,6 +1,6 @@
 //go:build windows
 
-// Command syspulse is a Windows system diagnostics and observability
+// Command syspulse (3.0) is a Windows system diagnostics and observability
 // dashboard: live sockets, processes, system resources, event log
 // reliability analysis and software updates via winget, served from an
 // embedded web UI on http://localhost:9099.
@@ -25,6 +25,7 @@ import (
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/hub"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/model"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netmon"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/netnames"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/procmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/radar"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/server"
@@ -94,6 +95,9 @@ func main() {
 		radarCD  = flag.Duration("radar-cooldown", 60*time.Second, "quiet time after which a sweep incident is closed")
 		radarAll = flag.String("radar-allow", "", "comma-separated remote IPs never flagged (e.g. authorised vulnerability scanners)")
 		noRaw    = flag.Bool("no-raw-capture", false, "disable the raw SYN sensor (SIO_RCVALL); use the TCP table only")
+		selfTest = flag.Bool("enable-selftest", false, "allow the synthetic radar self-test (off by default: the dashboard shows only real host telemetry)")
+		clients  = flag.String("radar-client-procs", "", "extra comma-separated outbound-only process names ignored by the TCP-table sensor (browsers and updaters are built in)")
+		noRes    = flag.Bool("no-resolve", false, "disable NetBIOS / mDNS / reverse-DNS name resolution of LAN devices")
 		verbose  = flag.Bool("v", false, "verbose logging")
 		version  = flag.Bool("version", false, "print version and exit")
 	)
@@ -124,11 +128,14 @@ func main() {
 		MetricsEvery: *interval, NetEvery: *interval, EventsEvery: 15 * time.Second,
 		EventWindow: *window, MaxEvents: *maxEv, Channels: []string{"System", "Application"},
 		RadarWindow: *radarWin, RadarThreshold: *radarThr, RadarCooldown: *radarCD, RadarAllow: splitList(*radarAll),
+		SelfTest: *selfTest, ClientProcs: splitList(*clients), NoResolve: *noRes, Resolver: netnames.New(),
 	}, log, sm, pm, tracker, eventSource{er})
 	rp := radar.NewSystemPlatform()
 	h.SetRadarPlatform(rp)
+	h.SetGateways(rp.Gateways())
 	h.SetAuditSource(auditSource{er})
 	srv := server.New(h, sw{}, log, *addr)
+	srv.Platform = "windows"
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

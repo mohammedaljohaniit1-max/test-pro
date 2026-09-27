@@ -396,28 +396,32 @@ func (s *demoSW) RunUpgrade(ctx context.Context, id string) (string, error) {
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:9099", "listen address (loopback only)")
-	preview := flag.String("preview", "", "also expose the demo through a reverse proxy on this address (e.g. 0.0.0.0:8080) for remote review")
+	preview := flag.String("preview", "", "also expose the dashboard through a reverse proxy on this address (e.g. 0.0.0.0:8080) for remote review")
+	synthetic := flag.Bool("synthetic", false, "serve simulated telemetry instead of this host's real data (UI development only)")
+	selfTest := flag.Bool("enable-selftest", false, "allow the synthetic radar self-test button")
+	noResolve := flag.Bool("no-resolve", false, "disable NetBIOS / mDNS / DNS name resolution of LAN devices")
 	flag.Parse()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	if err := checkLoopback(*addr); err != nil {
 		log.Error("refusing to start", "err", err)
 		os.Exit(2)
 	}
-	procs := newProcs()
-	pm := procmon.New(procs, 4)
-	nd := newNet(procs)
-	tracker := netmon.NewTracker(nd.Source, pm.Resolve)
-	sm := sysmon.New(newPlat(), 300)
-	h := hub.New(hub.Config{MetricsEvery: time.Second, NetEvery: time.Second, EventsEvery: 5 * time.Second,
-		Channels: []string{"System", "Application"}}, log, sm, pm, tracker, newEvents())
-	h.SetRadarPlatform(demoRadarPlat{})
-	h.SetAuditSource(newDemoAudit())
-	srv := server.New(h, newSW(), log, *addr)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	var h *hub.Hub
+	var srv *server.Server
+	if *synthetic {
+		h, srv = syntheticStack(ctx, log, *addr)
+	} else {
+		var err error
+		h, srv, err = liveStack(ctx, log, *addr, *selfTest, *noResolve)
+		if err != nil {
+			log.Error("live host telemetry unavailable on this OS; use -synthetic for simulated data", "err", err)
+			os.Exit(2)
+		}
+	}
 	go h.Run(ctx)
-	go runDemoTraffic(ctx, h)
 	if *preview != "" {
 		go func() {
 			if err := servePreview(*preview, *addr, log); err != nil {
@@ -425,9 +429,31 @@ func main() {
 			}
 		}()
 	}
-	err := srv.ListenAndServe(ctx, func(url string) { log.Info("demo dashboard ready", "url", url) })
+	mode := "live host telemetry"
+	if *synthetic {
+		mode = "SYNTHETIC data"
+	}
+	err := srv.ListenAndServe(ctx, func(url string) { log.Info("dashboard ready", "url", url, "mode", mode) })
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Error("server stopped", "err", err)
 		os.Exit(1)
 	}
+}
+
+// syntheticStack wires the deterministic simulators (UI development only).
+// The dashboard shows a "SIMULATED DATA" badge in this mode.
+func syntheticStack(ctx context.Context, log *slog.Logger, addr string) (*hub.Hub, *server.Server) {
+	procs := newProcs()
+	pm := procmon.New(procs, 4)
+	nd := newNet(procs)
+	tracker := netmon.NewTracker(nd.Source, pm.Resolve)
+	sm := sysmon.New(newPlat(), 300)
+	h := hub.New(hub.Config{MetricsEvery: time.Second, NetEvery: time.Second, EventsEvery: 5 * time.Second,
+		Channels: []string{"System", "Application"}, SelfTest: true, NoResolve: true}, log, sm, pm, tracker, newEvents())
+	h.SetRadarPlatform(demoRadarPlat{})
+	h.SetAuditSource(newDemoAudit())
+	srv := server.New(h, newSW(), log, addr)
+	srv.Synthetic, srv.Platform = true, "synthetic"
+	go runDemoTraffic(ctx, h)
+	return h, srv
 }

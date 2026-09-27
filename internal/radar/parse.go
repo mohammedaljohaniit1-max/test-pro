@@ -138,11 +138,65 @@ func ParseInboundSYN(pkt []byte, local net.IP) (src net.IP, srcPort uint16, dst 
 // Socket-table sensor
 // ---------------------------------------------------------------------------
 
+// TableOptions tunes how the socket-table sensor classifies new rows.
+type TableOptions struct {
+	// ClientProcs are lower-case process image names that only make
+	// outbound connections (browsers, updaters, sync clients). Their rows are
+	// never treated as inbound attempts.
+	ClientProcs map[string]bool
+}
+
+// DefaultClientProcs lists common multi-connection client applications.
+// A browser with many tabs opens hundreds of short-lived outbound sockets
+// per minute; none of them are inbound probes.
+var DefaultClientProcs = []string{
+	"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "opera_gx.exe", "vivaldi.exe", "iexplore.exe",
+	"msedgewebview2.exe", "arc.exe", "chrome", "chromium", "chromium-browse", "firefox", "firefox-bin", "brave", "opera", "vivaldi-bin",
+	"teams.exe", "ms-teams.exe", "slack.exe", "discord.exe", "zoom.exe", "spotify.exe", "onedrive.exe", "dropbox.exe",
+	"googledrivefs.exe", "outlook.exe", "olk.exe", "thunderbird.exe", "whatsapp.exe", "telegram.exe", "signal.exe",
+	"code.exe", "code", "slack", "discord", "spotify", "zoom", "teams", "thunderbird",
+	"googleupdate.exe", "microsoftedgeupdate.exe", "msedgeupdate.exe", "updater.exe", "update.exe", "wuauclt.exe",
+	"usoclient.exe", "mousocoreworker.exe", "backgroundtaskhost.exe", "searchapp.exe", "searchhost.exe",
+	"steam.exe", "steamwebhelper.exe", "epicgameslauncher.exe", "officeclicktorun.exe",
+	"apt", "apt-get", "packagekitd", "snapd", "unattended-upgr", "fwupd",
+}
+
+// NewTableOptions builds options from DefaultClientProcs plus extra names.
+func NewTableOptions(extra ...string) TableOptions {
+	o := TableOptions{ClientProcs: map[string]bool{}}
+	for _, n := range append(append([]string(nil), DefaultClientProcs...), extra...) {
+		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
+			o.ClientProcs[n] = true
+		}
+	}
+	return o
+}
+
+// ephemeralStart is the lowest port treated as ephemeral (client) port:
+// Linux uses 32768-60999, Windows 49152-65535.
+const ephemeralStart = 32768
+
+// servicePorts are remote ports that identify the peer as a server.
+var servicePorts = map[uint16]bool{
+	1433: true, 1521: true, 3306: true, 3389: true, 3478: true, 5222: true, 5223: true, 5228: true, 5349: true,
+	5432: true, 5938: true, 6379: true, 8008: true, 8080: true, 8443: true, 8883: true, 9000: true, 9443: true, 19302: true,
+}
+
+// LooksOutbound reports whether a socket is almost certainly a client
+// connection: an ephemeral local port talking to a well-known service port.
+func LooksOutbound(c model.Connection) bool {
+	return c.RemotePort != 0 && c.LocalPort >= ephemeralStart && (c.RemotePort < 1024 || servicePorts[c.RemotePort])
+}
+
 // FromConnections turns newly observed sockets (netmon Diff.Added) into
-// inbound observations. A TCP row is inbound when its local port is one
-// the machine listens on (listening[port]) or when it is in SYN_RECEIVED.
-// Outbound connections, UDP, LISTEN rows and loopback peers are ignored.
-func FromConnections(added []model.Connection, listening map[string]bool) []Observation {
+// inbound observations. A TCP row is inbound only when it is SYN_RECEIVED,
+// or when a listener exists for the same protocol and port whose bound
+// address is the wildcard or the row's local address and which is owned by
+// the same process (or the kernel, PID 0/4, e.g. http.sys). Rows owned by
+// known client applications, and rows that look like outbound client
+// connections, are never counted — this keeps multi-tab browsers and
+// background updaters from producing false sweep alerts.
+func FromConnections(added []model.Connection, listening map[string][]model.Listener, opt TableOptions) []Observation {
 	var out []Observation
 	for _, c := range added {
 		if c.Proto != "TCP" && c.Proto != "TCP6" {
@@ -151,8 +205,13 @@ func FromConnections(added []model.Connection, listening map[string]bool) []Obse
 		if c.State == "LISTEN" || c.RemoteAddr == "" || c.RemotePort == 0 {
 			continue
 		}
-		if c.State != "SYN_RECEIVED" && !listening[ListenKey(c.Proto, c.LocalPort)] {
+		if opt.ClientProcs[strings.ToLower(c.ProcessName)] {
 			continue
+		}
+		if c.State != "SYN_RECEIVED" {
+			if LooksOutbound(c) || !acceptedBy(c, listening[ListenKey(c.Proto, c.LocalPort)]) {
+				continue
+			}
 		}
 		out = append(out, Observation{
 			Time: time.UnixMilli(c.FirstSeen), RemoteIP: c.RemoteAddr, RemotePort: c.RemotePort,
@@ -160,6 +219,17 @@ func FromConnections(added []model.Connection, listening map[string]bool) []Obse
 		})
 	}
 	return out
+}
+
+func acceptedBy(c model.Connection, ls []model.Listener) bool {
+	for _, l := range ls {
+		addrOK := l.Addr == "" || l.Addr == "0.0.0.0" || l.Addr == "::" || l.Addr == c.LocalAddr
+		pidOK := l.PID == c.PID || l.PID == 0 || l.PID == 4 || c.PID == 0 || c.PID == 4
+		if addrOK && pidOK {
+			return true
+		}
+	}
+	return false
 }
 
 // ListenKey identifies a listening port per address family.

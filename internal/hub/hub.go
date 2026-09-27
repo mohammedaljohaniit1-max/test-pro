@@ -42,6 +42,12 @@ type Config struct {
 	RadarCooldown  time.Duration // default 60 s
 	RadarAllow     []string      // remote IPs never flagged
 	AlertsMax      int           // default 2000
+
+	// SysPulse 3.0.
+	SelfTest    bool     // allow the synthetic radar self-test (off in live mode)
+	ClientProcs []string // extra outbound-only process names ignored by the table sensor
+	NoResolve   bool     // disable NetBIOS / mDNS / DNS name resolution of LAN devices
+	Resolver    NameResolver
 }
 
 func (c *Config) defaults() {
@@ -227,7 +233,7 @@ func (h *Hub) collectNet() {
 		h.netErr = ""
 	}
 	var stats model.NetStats
-	var listening map[string]bool
+	var listening map[string][]model.Listener
 	if err == nil {
 		stats = h.net.Stats()
 		listening = h.net.Listening()
@@ -270,6 +276,14 @@ func (h *Hub) collectEvents() {
 			continue
 		}
 		var maxRec uint64
+		for i := range evs {
+			// Normalise the level name so filters, badges and translations
+			// work regardless of how the source spelled it ("Error", "ERROR"…).
+			evs[i].LevelStr = eventlog.LevelName(evs[i].Level)
+			if evs[i].Category == "" {
+				evs[i].Category = model.CatOther
+			}
+		}
 		for _, e := range evs {
 			if e.RecordID > maxRec {
 				maxRec = e.RecordID
@@ -346,6 +360,8 @@ type Snapshot struct {
 	EventError  string                `json:"eventError,omitempty"`
 	NetError    string                `json:"netError,omitempty"`
 	Radar       any                   `json:"radar"`
+	Devices     []model.Device        `json:"devices"`
+	SelfTest    bool                  `json:"selfTest"`
 	Alerts      []model.Alert         `json:"alerts"`
 	AlertCounts any                   `json:"alertcounts"`
 	Audit       AuditState            `json:"audit"`
@@ -366,7 +382,7 @@ func (h *Hub) Snapshot() Snapshot {
 		Metrics: h.sys.Last(), History: h.sys.History(), Processes: h.procs.Last(),
 		Connections: conns, NetStats: ns, Events: evs, EventStats: h.EventSummary(),
 		EventError: evErr, NetError: netErr,
-		Radar: h.radar.Snapshot(100), Alerts: h.alerts.List(alertsFilter(500)), AlertCounts: h.alerts.Counts(),
+		Radar: h.radar.Snapshot(100), Devices: h.Devices(), SelfTest: h.cfg.SelfTest, Alerts: h.alerts.List(alertsFilter(500)), AlertCounts: h.alerts.Counts(),
 		Audit: h.AuditState(),
 	}
 }

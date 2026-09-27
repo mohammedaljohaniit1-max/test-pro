@@ -119,6 +119,23 @@ func (p *SystemPlatform) LocalIPv4() []LocalAddr {
 	return out
 }
 
+// Gateways returns the default-gateway addresses of every IPv4 adapter
+// (the next hop GetBestRoute picks for 0.0.0.0 / a public address).
+func (p *SystemPlatform) Gateways() []string {
+	var row [14]uint32
+	dst := net.IPv4(8, 8, 8, 8).To4()
+	if r, _, _ := procGetBestRoute.Call(uintptr(ipv4ToDword(dst)), 0, uintptr(unsafe.Pointer(&row[0]))); r != 0 {
+		return nil
+	}
+	var nh [4]byte
+	binary.LittleEndian.PutUint32(nh[:], row[3])
+	gw := net.IPv4(nh[0], nh[1], nh[2], nh[3]).To4()
+	if gw.Equal(net.IPv4zero) {
+		return nil
+	}
+	return []string{gw.String()}
+}
+
 // Neighbors reads the IPv4 ARP cache with GetIpNetTable.
 func (p *SystemPlatform) Neighbors() ([]Neighbor, error) {
 	p.refresh(false)

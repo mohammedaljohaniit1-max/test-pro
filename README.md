@@ -1,4 +1,4 @@
-# SysPulse 2.0
+# SysPulse 3.0
 
 > **Windows Observability & System Reliability Cockpit** — bilingual (English / العربية with full RTL), with a multi-port connection-sweep radar, one-click event-log diagnostics, an Alerts & Incidents centre and an integrated user guide.
 
@@ -17,6 +17,20 @@ It reads the machine and does not change it. The one exception is the software u
 | **Alerts & Incidents** *(2.0)* | Critical / Warning / Informational badges, de-duplication with counts, quick filters, search, acknowledgement, one-click JSON/CSV export (UTF-8 BOM, formula-injection safe). Fed by the radar, the event log, the audits and resource thresholds. | all modules |
 | **User Guide / دليل الاستخدام** *(2.0)* | Metric and feature comparison tables, sensor explanations, flags, troubleshooting and a step-by-step **Verification Guide** for safely testing sweep detection on your own LAN. | embedded |
 | **Software** | Installed programs from the registry Uninstall keys (HKLM 64-bit, HKLM 32-bit, HKCU), merged with `winget upgrade` results. Upgradable packages get a one-click **Upgrade** button. | `x/sys/windows/registry`, `winget.exe` |
+
+## What's new in 3.0
+
+| Area | Change |
+|---|---|
+| **100 % real telemetry** | `syspulse.exe` runs no synthetic generator. The radar self-test is disabled unless you pass `-enable-selftest` (the button is hidden and `POST /api/radar/selftest` returns `403`). The header shows a **LIVE HOST DATA** badge. The preview binary (`cmd/syspulse-demo`) now also reads the *real* host by default on Linux (`/proc`, journald, dpkg/rpm, `/proc/net/arp`); simulated data needs an explicit `-synthetic` flag and is labelled **SIMULATED DATA**. |
+| **No sweep false positives from browsers** | The TCP-table sensor counts a new row as inbound only when a listener with the same protocol, port, **bound address and owning process** accepted it (or the row is `SYN_RECEIVED`). Rows owned by known client apps (browsers, Teams, OneDrive, Spotify, winget, Windows Update…) and ephemeral-port → service-port sockets are never observations. The host's own IPv4 addresses are ignored. Extend the list with `-radar-client-procs`. |
+| **LAN device & vendor profiling** | Network → *Local network devices*: every ARP neighbour enriched from an **embedded IEEE OUI registry** (53 624 MA-L / MA-M / MA-S prefixes, longest-prefix match, ~550 KB gzip) with brand, device class and randomised-MAC detection, plus host names from **NetBIOS node status (UDP 137)**, **mDNS reverse PTR (unicast 5353)** and **reverse DNS**. Only the device itself is queried; nothing is broadcast. Vendors also appear in the radar, sweep banner and alerts. |
+| **Instant Event Log & Diagnostics filters** | Multi-select severity chips with live counts, category / channel / finding-type dropdowns, quick ranges (1 h, 24 h, 3 days) and From/To pickers, all evaluated client-side on every keystroke. Event levels are normalised server- and client-side (fixes the `LVL.ERROR` label and filters that matched nothing). `GET /api/events` accepts `level=a,b`, `from=` and `to=` (unix ms). |
+| **Deep software inventory** | Registry uninstall keys in HKLM 64-bit, HKLM 32-bit (WOW6432Node), HKCU 64/32-bit and other loaded user hives under HKU. Every entry keeps publisher, version, architecture, MSI flag, uninstall command, install source and install date; when `InstallDate` is missing the key's last-write time is used (marked `*`). System components and updates can be shown with a toggle. |
+| **Process actions** | Quick filters (*High CPU*, *High memory*, *Top 10*, *Protected*) with adjustable thresholds, **Copy process diagnostic path**, and an **Inspect details** modal (`GET /api/processes/{pid}`) with command line, account, handle count, priority, I/O counters, children and owned sockets. |
+| **Branding** | Pulsating cyan neon glow on the *SysPulse* wordmark and a continuously scrolling SVG EKG trace (CSS keyframes only, CSP-safe, respects `prefers-reduced-motion`, mirrored in RTL). |
+
+New flags: `-enable-selftest`, `-radar-client-procs`, `-no-resolve`. New endpoints: `GET /api/devices`, `POST /api/devices/resolve`, `GET /api/oui?mac=`, `GET /api/processes/{pid}`, `GET /api/mode`. New WebSocket message: `devices`.
 
 ## Directory structure
 
@@ -39,6 +53,9 @@ It reads the machine and does not change it. The one exception is the software u
     ├── software/                 # registry inventory filter, winget parser/merger + Windows backend
     ├── ws/                       # dependency-free RFC 6455 WebSocket server
     ├── radar/                    # sweep detector, ARP/raw-packet parsing, SIO_RCVALL sensor (Windows)
+    ├── oui/                      # embedded IEEE OUI registry (MA-L/MA-M/MA-S) + generator (3.0)
+    ├── netnames/                 # NetBIOS NBSTAT, mDNS PTR and reverse-DNS host-name resolver (3.0)
+    ├── linuxhost/                # real Linux collectors for the preview binary (3.0)
     ├── alerts/                   # alert store, filters, JSON/CSV export
     ├── audit/                    # auth + reliability analysis with bilingual diagnosis/fix
     ├── hub/                      # collector scheduler and WebSocket fan-out
@@ -53,7 +70,7 @@ Every package has platform-neutral logic (parsing, diffing, CPU maths, classific
 On **Windows**, with Go 1.23+ installed:
 
 ```bat
-build.bat               :: vet + test + build dist\syspulse.exe (v2.0.0, amd64)
+build.bat               :: vet + test + build dist\syspulse.exe (v3.0.0, amd64)
 build.bat 1.2.0 arm64   :: custom version / architecture
 set SKIP_TESTS=1 && build.bat
 ```
@@ -87,6 +104,9 @@ syspulse.exe -no-browser -addr 127.0.0.1:9100
 | `-radar-cooldown` | `60s` | Quiet time after which a sweep incident closes. |
 | `-radar-allow` | | Comma-separated IPs never flagged (authorised scanners). |
 | `-no-raw-capture` | `false` | Disable the raw SYN sensor and use the TCP table only. |
+| `-enable-selftest` | `false` | Allow the synthetic radar self-test (off: live telemetry only). |
+| `-radar-client-procs` | | Extra comma-separated outbound-only process names ignored by the TCP-table sensor. |
+| `-no-resolve` | `false` | Do not resolve LAN device names (NetBIOS / mDNS / reverse DNS). |
 | `-v` | `false` | Debug logging. |
 | `-version` | | Print the version and exit. |
 
@@ -95,10 +115,11 @@ syspulse.exe -no-browser -addr 127.0.0.1:9100
 ### Try the UI without Windows
 
 ```sh
-go run ./cmd/syspulse-demo            # http://127.0.0.1:9099 with simulated telemetry
+go run ./cmd/syspulse-demo              # Linux: the real dashboard fed by THIS host's live data
+go run ./cmd/syspulse-demo -synthetic   # any OS: simulated telemetry for UI development (badge: SIMULATED DATA)
 ```
 
-The demo uses the real hub, server and embedded UI. Only the OS collectors are replaced. `-preview 0.0.0.0:8080` adds a reverse proxy for review behind an HTTPS gateway. This flag exists only in the demo binary.
+The preview binary uses the real hub, server and embedded UI. On Linux its collectors read `/proc`, `/proc/net/{tcp,udp,arp,route}`, journald and dpkg/rpm, so nothing is simulated; it is read-only (package upgrades are refused). `-preview 0.0.0.0:8080` adds a reverse proxy for review behind an HTTPS gateway. This flag exists only in the preview binary.
 
 ## Security model
 
@@ -116,7 +137,7 @@ SysPulse shows sensitive host data and can start `winget`, so the HTTP surface i
 
 ## Verifying sweep detection
 
-1. **Radar → Run safe self-test**: a synthetic sweep from `198.51.100.77` triggers the banner, chime and a critical alert without sending any packets.
+1. Start with `-enable-selftest`, then **Radar → Run safe self-test**: a synthetic sweep from `198.51.100.77` triggers the banner, chime and a critical alert without sending any packets.
 2. On a second machine you own, on the same LAN: `nmap -sS -p 1-100 -T4 <this-PC-IP>` or the PowerShell loop in the in-app guide. Within a second the banner shows that machine's IP and MAC (compare with `ipconfig /all`).
 
 Only scan machines you own or are authorised to test.

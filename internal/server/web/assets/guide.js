@@ -1,18 +1,33 @@
-/* SysPulse 2.0 — integrated User Guide & System Manual (English / Arabic).
+/* SysPulse 3.0 — integrated User Guide & System Manual (English / Arabic).
  * Content is structured data rendered into tables by renderGuide(); all text
  * is escaped, so it is safe under the strict CSP. */
 (() => {
   "use strict";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   // `code` spans: text between backticks is rendered monospace.
-  const rich = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Minimal inline markup on already-escaped text: `code`, **bold**, *italic*.
+  const rich = (s) => esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(«“])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
 
   const G = {
     en: {
-      title: "SysPulse 2.0 — User Guide & System Manual",
+      title: "SysPulse 3.0 — User Guide & System Manual",
       intro: "SysPulse is a read-only Windows observability and reliability cockpit. It samples the machine through native Win32 APIs, streams live telemetry to this dashboard over a local WebSocket, detects network connection sweeps, audits the event logs on demand and keeps a searchable, exportable incident stream. Nothing is changed on the machine except the software upgrades you start yourself.",
       toc: "Contents",
       sections: [
+        {
+          id: "v3", h: "What's new in 3.0",
+          table: { cols: ["Feature", "What it does"], rows: [
+            ["100% real telemetry", "syspulse.exe runs no synthetic generator. The radar self-test is off unless started with `-enable-selftest`; the header badge shows **LIVE HOST DATA**."],
+            ["False-positive hardening", "The TCP-table sensor only counts a row as inbound when a listener for the same address *and* process accepted it. Browsers, sync clients and updaters (Chrome, Edge, Firefox, Teams, OneDrive, winget…) and ephemeral→service-port sockets are never counted. The host's own addresses are ignored. Add names with `-radar-client-procs`."],
+            ["LAN device & vendor profiling", "Network → **Local network devices**: every ARP neighbour with its manufacturer from the embedded IEEE OUI registry (≈54 000 MA-L/MA-M/MA-S prefixes, longest-prefix match), device type, and host name from NetBIOS, mDNS or reverse DNS. Randomised (private) MACs are flagged."],
+            ["Instant filters", "Event Log and Diagnostics: multi-select severity chips with live counts, category and channel dropdowns, quick ranges (1 h / 24 h / 3 days) and From/To date pickers — all applied as you type, no reloads."],
+            ["Deep software inventory", "HKLM 64/32-bit, HKCU 64/32-bit and other users' hives (HKU). Toggle system components and updates, filter by scope/publisher, click a row for uninstall command, registry key, install source and date origin."],
+            ["Process actions", "Quick filters (High CPU, High memory, Top 10, Protected) with thresholds, one-click **Copy process diagnostic path**, and an **Inspect details** modal with command line, account, handles, priority, I/O, children and sockets."],
+          ] },
+        },
         {
           id: "quick", h: "1. Quick start",
           list: [
@@ -99,7 +114,7 @@
           id: "verify", h: "7. Verification guide — testing sweep detection safely",
           warn: "Only scan machines you own or are explicitly authorised to test. Port scanning third-party networks may be illegal. The steps below stay inside your own LAN.",
           steps: [
-            ["Built-in self-test (no network traffic)", "Open **Anomaly Radar** and press **Run safe self-test**. SysPulse injects a synthetic sweep from the documentation address `198.51.100.77` (RFC 5737). Expected: red banner with MAC `00-00-5E-00-53-01`, chime, a critical “[TEST]” alert, and an incident marked *test*."],
+            ["Built-in self-test (no network traffic)", "Start SysPulse with `-enable-selftest` (the button is hidden and the endpoint refused in live mode), open **Anomaly Radar** and press **Run safe self-test**. SysPulse injects a synthetic sweep from the documentation address `198.51.100.77` (RFC 5737). Expected: red banner with MAC `00-00-5E-00-53-01`, chime, a critical “[TEST]” alert, and an incident marked *test*."],
             ["Prepare the target (this PC)", "Start SysPulse as administrator. On the Radar tab confirm **Raw SYN sensor: active**. Note this PC's IPv4 address with `ipconfig` (e.g. `192.168.1.42`)."],
             ["Choose a second machine on the same LAN", "Any Windows, Linux or macOS machine you control. Its IP should appear in the ARP table (**ARP table** button) after it has talked to this PC once (e.g. `ping 192.168.1.42`)."],
             ["Generate a sweep — option A: PowerShell (no tools to install)", "On the second machine run:\n`1..40 | % { $c = New-Object Net.Sockets.TcpClient; $c.BeginConnect('192.168.1.42', $_, $null, $null) | Out-Null; Start-Sleep -Milliseconds 50; $c.Close() }`\nThis touches ports 1–40 in about 2 seconds."],
@@ -150,10 +165,21 @@
     },
 
     ar: {
-      title: "SysPulse 2.0 — دليل الاستخدام ودليل النظام",
+      title: "SysPulse 3.0 — دليل الاستخدام ودليل النظام",
       intro: "SysPulse لوحة قراءة فقط لمراقبة Windows وموثوقيته. يقرأ حالة الجهاز عبر واجهات Win32 الأصلية، ويبث القياسات الحية إلى هذه اللوحة عبر WebSocket محلي، ويكتشف عمليات مسح المنافذ على الشبكة، ويدقق سجلات الأحداث عند الطلب، ويحفظ سجل حوادث قابلًا للبحث والتصدير. لا يغيّر شيئًا على الجهاز باستثناء ترقيات البرامج التي تبدؤها بنفسك.",
       toc: "المحتويات",
       sections: [
+        {
+          id: "v3", h: "الجديد في الإصدار 3.0",
+          table: { cols: ["الميزة", "ماذا تفعل"], rows: [
+            ["بيانات حقيقية 100%", "لا يشغّل syspulse.exe أي مولّد بيانات اصطناعية. الاختبار الذاتي للرادار معطّل ما لم يُشغَّل البرنامج بالخيار `-enable-selftest`، وتعرض الشارة في الأعلى **بيانات حيّة من الجهاز**."],
+            ["الحد من الإنذارات الكاذبة", "لا يَعُدّ مستشعر جدول TCP الاتصال واردًا إلا إذا قبله مستمع على العنوان نفسه ومن العملية نفسها. لا تُحتسب أبدًا اتصالات المتصفحات وعملاء المزامنة وبرامج التحديث (Chrome و Edge و Firefox و Teams و OneDrive و winget…) ولا الاتصالات من منفذ مؤقت إلى منفذ خدمة. عناوين الجهاز نفسه مستثناة. أضف أسماء أخرى عبر `-radar-client-procs`."],
+            ["تعريف أجهزة الشبكة والمصنّعين", "الشبكة ← **أجهزة الشبكة المحلية**: كل جار في جدول ARP مع الشركة المصنّعة من سجل IEEE OUI المضمّن (نحو 54 ألف بادئة MA-L/MA-M/MA-S بمطابقة أطول بادئة)، ونوع الجهاز، واسمه عبر NetBIOS أو mDNS أو DNS العكسي. تُعلَّم عناوين MAC العشوائية (الخاصة)."],
+            ["تصفية فورية", "سجل الأحداث والتشخيص: شرائح خطورة متعددة الاختيار مع أعداد حيّة، وقوائم الفئة والقناة، ونطاقات سريعة (ساعة / 24 ساعة / 3 أيام) ومنتقي تاريخ من/إلى — تُطبَّق أثناء الكتابة دون إعادة تحميل."],
+            ["جرد عميق للبرامج", "HKLM بنسختي 64/32 بت، و HKCU بنسختي 64/32 بت، وسجلات المستخدمين الآخرين (HKU). يمكن إظهار مكوّنات النظام والتحديثات، والتصفية حسب النطاق والناشر، والنقر على أي صف لعرض أمر الإزالة ومفتاح السجل ومصدر التثبيت ومصدر التاريخ."],
+            ["إجراءات العمليات", "مرشحات سريعة (معالج مرتفع، ذاكرة مرتفعة، أعلى 10، محمية) مع حدود قابلة للضبط، وزر **نسخ مسار العملية التشخيصي**، ونافذة **عرض التفاصيل** مع سطر الأوامر والحساب والمقابض والأولوية والإدخال/الإخراج والعمليات الفرعية والمقابس."],
+          ] },
+        },
         {
           id: "quick", h: "1. البدء السريع",
           list: [
@@ -240,7 +266,7 @@
           id: "verify", h: "7. دليل التحقق — اختبار كشف المسح بأمان",
           warn: "لا تفحص إلا الأجهزة التي تملكها أو المصرّح لك رسميًا باختبارها. فحص منافذ شبكات الآخرين قد يكون مخالفًا للقانون. الخطوات التالية تبقى داخل شبكتك المحلية.",
           steps: [
-            ["الاختبار الذاتي المدمج (دون أي حركة على الشبكة)", "افتح **رادار الشذوذ** واضغط **تشغيل اختبار ذاتي آمن**. يحقن SysPulse مسحًا اصطناعيًا من عنوان التوثيق `198.51.100.77` ‏(RFC 5737). النتيجة المتوقعة: شريط أحمر مع عنوان MAC ‏`00-00-5E-00-53-01`، وتنبيه صوتي، وتنبيه حرج يحمل «[اختبار]»، وحادثة معلّمة بـ *اختبار*."],
+            ["الاختبار الذاتي المدمج (دون أي حركة على الشبكة)", "شغّل SysPulse بالخيار `-enable-selftest` (الزر مخفي والطلب مرفوض في الوضع الحي)، ثم افتح **رادار الشذوذ** واضغط **تشغيل اختبار ذاتي آمن**. يحقن SysPulse مسحًا اصطناعيًا من عنوان التوثيق `198.51.100.77` ‏(RFC 5737). النتيجة المتوقعة: شريط أحمر مع عنوان MAC ‏`00-00-5E-00-53-01`، وتنبيه صوتي، وتنبيه حرج يحمل «[اختبار]»، وحادثة معلّمة بـ *اختبار*."],
             ["تجهيز الجهاز المستهدف (هذا الجهاز)", "شغّل SysPulse بصلاحيات المسؤول. في تبويب الرادار تأكد من أن **مستشعر SYN الخام: نشط**. سجّل عنوان IPv4 لهذا الجهاز عبر `ipconfig` (مثل `192.168.1.42`)."],
             ["اختيار جهاز ثانٍ على الشبكة نفسها", "أي جهاز Windows أو Linux أو macOS تملكه. يجب أن يظهر عنوانه في جدول ARP (زر **جدول ARP**) بعد أن يتواصل مع هذا الجهاز مرة واحدة (مثل `ping 192.168.1.42`)."],
             ["توليد مسح — الخيار أ: PowerShell (دون تثبيت أدوات)", "على الجهاز الثاني نفّذ:\n`1..40 | % { $c = New-Object Net.Sockets.TcpClient; $c.BeginConnect('192.168.1.42', $_, $null, $null) | Out-Null; Start-Sleep -Milliseconds 50; $c.Close() }`\nيلمس هذا الأمر المنافذ 1–40 في نحو ثانيتين."],

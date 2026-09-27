@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/oui"
 )
 
 // Sensor identifiers.
@@ -79,6 +81,7 @@ type Incident struct {
 	ID            string    `json:"id"`
 	RemoteIP      string    `json:"remoteIp"`
 	MAC           string    `json:"mac"`
+	Vendor        string    `json:"vendor,omitempty"`
 	Interface     string    `json:"interface"`
 	IfIndex       uint32    `json:"ifIndex"`
 	OnLink        bool      `json:"onLink"` // MAC belongs to the host itself (same L2 segment)
@@ -163,7 +166,27 @@ type Detector struct {
 	neighbors map[string]Neighbor
 	obsCount  []obsBucket
 	sensors   map[string]SensorStatus
+	local     map[string]bool // this machine's own addresses (never a sweeper)
 	now       func() time.Time
+}
+
+// LocalLister is implemented by platforms that can enumerate this host's
+// IPv4 addresses (used to exclude self-traffic from the radar).
+type LocalLister interface {
+	LocalIPv4() []LocalAddr
+}
+
+// SetLocal replaces the set of this machine's own addresses. Connections
+// between two local addresses (e.g. a browser talking to a local proxy over
+// the LAN IP) are never evaluated.
+func (d *Detector) SetLocal(ips []string) {
+	m := make(map[string]bool, len(ips))
+	for _, ip := range ips {
+		m[normIP(ip)] = true
+	}
+	d.mu.Lock()
+	d.local = m
+	d.mu.Unlock()
 }
 
 type obsBucket struct {
@@ -272,7 +295,7 @@ func (d *Detector) Ignored(ip string) bool {
 	if p == nil || p.IsLoopback() || p.IsUnspecified() || p.IsMulticast() || p.Equal(net.IPv4bcast) {
 		return true
 	}
-	return d.allow[p.String()]
+	return d.allow[p.String()] || d.local[normIP(ip)]
 }
 
 // Observe records connection attempts and returns incidents that were
@@ -393,6 +416,7 @@ func (d *Detector) Attribute(id string, n Neighbor, onLink bool, err error) (Inc
 			if err != nil && inc.MAC == "" {
 				inc.AttrError = err.Error()
 			}
+			inc.Vendor = VendorOf(inc.MAC)
 			c := inc.clone()
 			c.New = false
 			return c, true
@@ -450,6 +474,7 @@ func (d *Detector) Incidents() []Incident {
 type HostStat struct {
 	IP            string   `json:"ip"`
 	MAC           string   `json:"mac,omitempty"`
+	Vendor        string   `json:"vendor,omitempty"`
 	Interface     string   `json:"interface,omitempty"`
 	ConnsWindow   int      `json:"connsWindow"` // attempts in the detection window
 	PortsWindow   int      `json:"portsWindow"` // distinct ports in the detection window
@@ -514,6 +539,7 @@ func (d *Detector) Snapshot(limit int) State {
 			hs.Sensors = append(hs.Sensors, s)
 		}
 		sort.Strings(hs.Sensors)
+		hs.Vendor = VendorOf(hs.MAC)
 		st.Hosts = append(st.Hosts, hs)
 	}
 	sort.Slice(st.Hosts, func(i, j int) bool {
@@ -636,7 +662,26 @@ func (inc *Incident) addPort(p uint16, t time.Time) {
 	inc.Ports[i] = p
 }
 
+// VendorOf returns the manufacturer brand for mac from the embedded IEEE
+// OUI database ("" when unknown; "private address" for randomised MACs).
+func VendorOf(mac string) string {
+	if mac == "" {
+		return ""
+	}
+	v, ok := oui.Lookup(mac)
+	switch {
+	case !ok:
+		return ""
+	case v.Short != "":
+		return v.Short
+	case v.Random:
+		return "private address"
+	}
+	return v.Name
+}
+
 func (inc *Incident) finish() {
+	inc.Vendor = VendorOf(inc.MAC)
 	if len(inc.Ports) > 0 {
 		inc.PortMin, inc.PortMax = inc.Ports[0], inc.Ports[len(inc.Ports)-1]
 	}

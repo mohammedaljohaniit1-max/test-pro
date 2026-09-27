@@ -87,7 +87,7 @@ func newEnv(t *testing.T) *env {
 	conns := []model.Connection{{Proto: "TCP", LocalAddr: "127.0.0.1", LocalPort: 9099, State: "LISTEN", PID: 10}}
 	tr := netmon.NewTracker(func() ([]model.Connection, error) { return conns, nil }, pm.Resolve)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := hub.New(hub.Config{MetricsEvery: 20 * time.Millisecond, NetEvery: 20 * time.Millisecond, EventsEvery: 20 * time.Millisecond, Channels: []string{"System"}},
+	h := hub.New(hub.Config{MetricsEvery: 20 * time.Millisecond, NetEvery: 20 * time.Millisecond, EventsEvery: 20 * time.Millisecond, Channels: []string{"System"}, SelfTest: true},
 		log, sysmon.New(fakePlat{}, 50), pm, tr, fakeEvents{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go h.Run(ctx)

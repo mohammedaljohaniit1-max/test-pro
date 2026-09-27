@@ -35,7 +35,7 @@ import (
 var webFS embed.FS
 
 // Version is set at build time.
-var Version = "dev"
+var Version = "3.0.0"
 
 // SoftwareBackend abstracts registry/winget access for tests.
 type SoftwareBackend interface {
@@ -51,6 +51,11 @@ type Server struct {
 	Log      *slog.Logger
 	Addr     string // e.g. 127.0.0.1:9099
 	token    string
+
+	// Synthetic is true only for the explicit -synthetic UI-review mode;
+	// the dashboard then shows a "SIMULATED DATA" badge.
+	Synthetic bool
+	Platform  string
 
 	swMu       sync.Mutex
 	apps       []model.App
@@ -101,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/software/refresh", s.guard(s.refreshSoftware))
 	mux.HandleFunc("POST /api/software/upgrade", s.guard(s.upgrade))
 	s.routesV2(mux)
+	s.routesV3(mux)
 	return securityHeaders(mux)
 }
 
@@ -176,7 +182,12 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := strings.Replace(string(b), "{{TOKEN}}", s.token, 1)
-	page = strings.Replace(page, "{{VERSION}}", Version, 1)
+	page = strings.ReplaceAll(page, "{{VERSION}}", Version)
+	mode := "live"
+	if s.Synthetic {
+		mode = "synthetic"
+	}
+	page = strings.Replace(page, "{{MODE}}", mode, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(page))
@@ -202,7 +213,14 @@ func (s *Server) processes(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	evs, errMsg := s.Hub.Events()
 	q := r.URL.Query()
-	level, cat, needle := q.Get("level"), q.Get("category"), strings.ToLower(q.Get("q"))
+	level, cat, needle := strings.ToLower(q.Get("level")), q.Get("category"), strings.ToLower(q.Get("q"))
+	var from, to time.Time
+	if v, err := strconv.ParseInt(q.Get("from"), 10, 64); err == nil && v > 0 {
+		from = time.UnixMilli(v)
+	}
+	if v, err := strconv.ParseInt(q.Get("to"), 10, 64); err == nil && v > 0 {
+		to = time.UnixMilli(v)
+	}
 	limit := 1000
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 10000 {
@@ -211,7 +229,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]model.Event, 0, limit)
 	for _, e := range evs {
-		if level != "" && e.LevelStr != level {
+		if level != "" && !levelMatch(level, e.LevelStr) {
+			continue
+		}
+		if (!from.IsZero() && e.Time.Before(from)) || (!to.IsZero() && e.Time.After(to)) {
 			continue
 		}
 		if cat != "" && e.Category != cat {
@@ -226,6 +247,17 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": out, "summary": s.Hub.EventSummary(), "error": errMsg})
+}
+
+// levelMatch accepts a single level or a comma-separated list (case-insensitive).
+func levelMatch(want, have string) bool {
+	have = strings.ToLower(have)
+	for _, l := range strings.Split(want, ",") {
+		if strings.TrimSpace(l) == have {
+			return true
+		}
+	}
+	return false
 }
 
 // websocket upgrades and streams telemetry. The first message is a full
