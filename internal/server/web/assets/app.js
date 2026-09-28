@@ -298,7 +298,7 @@
     const q = $("dev-q").value.trim().toLowerCase(), cls = sel.value;
     const all = S.devices || [];
     const rows = all.filter((d) => (!cls || devClass(d) === cls) &&
-      (!q || `${d.hostname || ""} ${d.ip} ${d.mac} ${d.vendor || ""} ${d.vendorFull || ""} ${d.workgroup || ""} ${d.interface || ""}`.toLowerCase().includes(q)));
+      (!q || `${d.hostname || ""} ${d.ip} ${d.mac} ${d.model || ""} ${d.vendor || ""} ${d.vendorFull || ""} ${d.workgroup || ""} ${d.interface || ""}`.toLowerCase().includes(q)));
     rows.sort((a, b) => devSort.key === "ip" ? (ipNum(a.ip) - ipNum(b.ip)) * devSort.dir : cmp(devSort)(a, b));
     const counts = {};
     all.forEach((d) => { const k = devClass(d); counts[k] = (counts[k] || 0) + 1; });
@@ -309,9 +309,10 @@
     $("dev-table").tBodies[0].innerHTML = rows.map((d) => {
       const k = devClass(d);
       const name = d.hostname ? `<b dir="ltr">${esc(d.hostname)}</b>` : `<span class="muted">${esc(d.resolving ? t("dev.resolving") : t("dev.noName"))}</span>`;
+      const model = d.model ? ` <span class="pill" title="${esc(d.modelSource || "device-advertised")}">${esc(d.model)}</span>` : "";
       const vendor = d.vendor ? `<span title="${esc(d.vendorFull || "")}${d.oui ? " — " + esc(d.oui) + " (" + esc(d.registry || "") + ")" : ""}">${esc(d.vendor === "private address" ? t("dev.private") : d.vendor)}</span>`
         : d.randomMac ? `<span class="pill test" title="${esc(t("dev.randomTip"))}">${esc(t("dev.private"))}</span>` : `<span class="muted">${esc(t("dev.unknownVendor"))}</span>`;
-      return `<tr data-dev="${esc(d.ip)}"><td><span class="dicon">${DEV_ICON[k]}</span> ${name}${d.gateway ? ` <span class="pill gw">${esc(t("dev.gateway"))}</span>` : ""}${d.workgroup ? ` <span class="muted small">· ${esc(d.workgroup)}</span>` : ""}</td>
+      return `<tr data-dev="${esc(d.ip)}"><td><span class="dicon">${DEV_ICON[k]}</span> ${name}${model}${d.gateway ? ` <span class="pill gw">${esc(t("dev.gateway"))}</span>` : ""}${d.workgroup ? ` <span class="muted small">· ${esc(d.workgroup)}</span>` : ""}</td>
         <td class="mono">${ltr(d.ip)}</td><td class="mono">${ltr(d.mac)}</td><td>${vendor}</td><td>${esc(t("dclass." + k))}</td>
         <td class="muted small">${d.nameSource ? esc(t("nsrc." + d.nameSource)) : "—"}</td><td class="muted">${esc(d.interface || "")}</td><td class="muted">${fmtTime(d.lastSeen)}</td></tr>`;
     }).join("") || `<tr><td colspan="8" class="muted">${esc(t("dev.none"))}</td></tr>`;
@@ -574,7 +575,7 @@
     if (!inc) { b.hidden = true; document.body.classList.remove("has-banner"); return; }
     b.hidden = false; document.body.classList.add("has-banner");
     b.classList.remove("pulse"); void b.offsetWidth; b.classList.add("pulse");
-    $("sb-title").textContent = t(inc.test ? "sweep.titleTest" : "sweep.title");
+    $("sb-title").textContent = inc.sensor === "wfp-5157" ? "CRITICAL · Firewall-blocked probe / إنذار حرج · محاولة حظرها الجدار الناري" : inc.sensor === "canary" ? "CRITICAL · Canary port contacted / إنذار حرج · منفذ الطُعم" : t(inc.test ? "sweep.titleTest" : "sweep.title");
     $("sb-ip").textContent = inc.remoteIp;
     $("sb-mac").textContent = macText(inc) + (inc.vendor ? ` · ${inc.vendor}` : "");
     $("sb-if").textContent = inc.interface || "—";
@@ -882,6 +883,10 @@
     if (i >= 0) S.alerts.splice(i, 1);
     S.alerts.unshift(a);
     if (S.alerts.length > 2000) S.alerts.length = 2000;
+    if (a.fields?.remoteIp && (a.source === "canary" || a.source === "wfp-5157")) {
+      const banner = S.banner.find((x) => x.id === "canary:" + a.fields.remoteIp);
+      if (banner) { banner.mac = a.fields.mac === "unknown" ? "" : a.fields.mac; banner.portRange = a.fields.portRange || banner.portRange; renderBanner(); }
+    }
     if (isNew && a.severity === "critical" && a.category !== "network-sweep") toast("⚠ " + tx(a.title));
   }
 
@@ -1047,9 +1052,13 @@
     $("conn-dot").className = "dot " + (state === "live" ? "on" : state === "retry" ? "off" : "");
     $("conn-text").textContent = t(state === "live" ? "conn.live" : state === "retry" ? "conn.retry" : "conn.connecting");
   }
+  function sendVisibility() {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ visible: !document.hidden }));
+  }
+  document.addEventListener("visibilitychange", sendVisibility);
   function connect() {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`);
-    ws.onopen = () => { retry = 500; setConn("live"); };
+    ws.onopen = () => { retry = 500; setConn("live"); sendVisibility(); };
     ws.onclose = () => { setConn("retry"); setTimeout(connect, retry); retry = Math.min(retry * 2, 10000); };
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
@@ -1083,10 +1092,13 @@
         case "radar":
           S.radar = d;
           // Drop banner entries whose incident has closed.
-          S.banner = S.banner.filter((b) => (d.incidents || []).some((i) => i.id === b.id && i.active));
+          S.banner = S.banner.filter((b) => b.id?.startsWith("canary:") ? Date.now() - new Date(b.detected).getTime() < 60000 : (d.incidents || []).some((i) => i.id === b.id && i.active));
           renderBanner();
           break;
         case "sweep": onSweep(d, !!d.new); break;
+        case "canary": onSweep({ id: "canary:" + d.remoteIp, remoteIp: d.remoteIp, mac: d.mac === "unknown" ? "" : d.mac,
+          portRange: d.portRange, portMin: 0, distinctPorts: 1, attempts: 1,
+          detected: d.detected, sensor: d.sensor || "canary", active: true }, true); break;
         case "alert": onAlert(d.alert, d.new); break;
         case "alertcounts": S.acounts = d; break;
         case "alertsreset": S.acounts = d; S.alerts = []; break;

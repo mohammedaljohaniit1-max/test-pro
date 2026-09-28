@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,8 +43,12 @@ type v2 struct {
 	auditRunning map[string]bool
 	radarTick    int
 
-	tableOpt radar.TableOptions
-	devices  *devices
+	tableOpt       radar.TableOptions
+	devices        *devices
+	canaryMu       sync.Mutex
+	canaryHits     map[string]map[uint16]time.Time
+	blockedRecord  uint64
+	blockedStarted bool
 }
 
 func (h *Hub) initV2() {
@@ -54,6 +59,7 @@ func (h *Hub) initV2() {
 	h.alerts = alerts.New(h.cfg.AlertsMax, 10*time.Minute)
 	h.audits = map[string]model.AuditReport{}
 	h.auditRunning = map[string]bool{}
+	h.canaryHits = map[string]map[uint16]time.Time{}
 	h.alerts.OnChange(func(a model.Alert, isNew bool) {
 		if h.Subscribers() == 0 {
 			return
@@ -61,6 +67,184 @@ func (h *Hub) initV2() {
 		h.Broadcast("alert", map[string]any{"alert": a, "new": isNew})
 		h.Broadcast("alertcounts", h.alerts.Counts())
 	})
+}
+
+// BlockedObservation accepts only inbound TCP Security/5157 rows for which
+// exactly one endpoint matches a known local IPv4 address. WFP providers may
+// encode source/destination in either order; guessing would create false
+// attacker attributions (including this machine's own IP).
+func BlockedObservation(e model.Event, local []string) (radar.Observation, bool) {
+	if e.EventID != 5157 || e.Channel != "Security" || e.Provider != "Microsoft-Windows-Security-Auditing" ||
+		e.Data["Protocol"] != "6" {
+		return radar.Observation{}, false
+	}
+	dir := strings.ToLower(strings.TrimSpace(e.Data["Direction"]))
+	if dir != "%%14592" && dir != "inbound" {
+		return radar.Observation{}, false
+	}
+	src, dst := net.ParseIP(e.Data["SourceAddress"]), net.ParseIP(e.Data["DestAddress"])
+	if src == nil || dst == nil || src.IsLoopback() || dst.IsLoopback() {
+		return radar.Observation{}, false
+	}
+	isLocal := func(ip net.IP) bool {
+		for _, s := range local {
+			if p := net.ParseIP(s); p != nil && ip.Equal(p) {
+				return true
+			}
+		}
+		return false
+	}
+	a, b := isLocal(src), isLocal(dst)
+	if a == b {
+		return radar.Observation{}, false
+	}
+	port := e.Data["SourcePort"]
+	remotePort := e.Data["DestPort"]
+	remote, host := dst, src
+	if b {
+		port, remotePort, remote, host = e.Data["DestPort"], e.Data["SourcePort"], src, dst
+	}
+	p, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || p == 0 || remote.IsUnspecified() || remote.IsMulticast() {
+		return radar.Observation{}, false
+	}
+	rp, _ := strconv.ParseUint(remotePort, 10, 16)
+	return radar.Observation{Time: e.Time, RemoteIP: remote.String(), RemotePort: uint16(rp),
+		LocalIP: host.String(), LocalPort: uint16(p), Sensor: "wfp-5157"}, true
+}
+
+// collectBlocked incrementally ingests audited WFP denies. Audit Filtering
+// Platform Connection (failure) must be enabled by Windows policy and reading
+// Security requires sufficient privileges. No audit policy is changed here.
+func (h *Hub) collectBlocked() {
+	src, ok := h.events.(interface {
+		QueryXPath(string, string, int, bool) ([]model.Event, error)
+	})
+	if !ok {
+		return
+	}
+	h.canaryMu.Lock()
+	last := h.blockedRecord
+	h.canaryMu.Unlock()
+	cond := "EventID=5157"
+	if last > 0 {
+		cond += fmt.Sprintf(" and EventRecordID > %d", last)
+	} else {
+		// Until an actual record is seen, always constrain the time window:
+		// never backfill years of Security failures after an empty first poll.
+		cond += " and TimeCreated[timediff(@SystemTime) <= 30000]"
+	}
+	evs, err := src.QueryXPath("Security", "*[System["+cond+"]]", 1024, false)
+	if err != nil {
+		h.radar.SetSensor(radar.SensorStatus{Name: "wfp-5157", Error: err.Error()})
+		return
+	}
+	h.canaryMu.Lock()
+	h.blockedStarted = true
+	h.canaryMu.Unlock()
+	if len(evs) == 1024 {
+		h.log.Warn("WFP audit backlog at capacity; some older records may be skipped")
+	}
+	var local []string
+	if p, ok := h.rplat.(radar.LocalLister); ok {
+		for _, a := range p.LocalIPv4() {
+			local = append(local, a.IP)
+		}
+	}
+	// Include IPv6 addresses as well: the ARP cache cannot resolve their MAC,
+	// but blocked IPv6 probes still deserve accurate remote-IP attribution.
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, a := range addrs {
+			if ipnet, ok := a.(*net.IPNet); ok {
+				local = append(local, ipnet.IP.String())
+			}
+		}
+	}
+	// QueryXPath returns newest first. Process oldest first to preserve
+	// event timestamp order and avoid skipping rows in this batch.
+	var max uint64 = last
+	for i := len(evs) - 1; i >= 0; i-- {
+		e := evs[i]
+		if e.RecordID <= last {
+			continue
+		}
+		if e.RecordID > max {
+			max = e.RecordID
+		}
+		if obs, ok := BlockedObservation(e, local); ok {
+			h.ObserveCanary(obs)
+		}
+	}
+	h.canaryMu.Lock()
+	if max > h.blockedRecord {
+		h.blockedRecord = max
+	}
+	h.canaryMu.Unlock()
+	h.radar.SetSensor(radar.SensorStatus{Name: "wfp-5157", Active: true,
+		Detail: "Security 5157 audit ingestion; requires Audit Filtering Platform Connection failures enabled"})
+}
+
+// ObserveCanary publishes a critical alert on the very first connection,
+// independently of the multi-port sweep threshold. MAC attribution is only
+// possible for an on-link peer; off-link MACs are gateway addresses.
+func (h *Hub) ObserveCanary(obs radar.Observation) {
+	ip := obs.RemoteIP
+	if netIP := net.ParseIP(ip); netIP == nil || netIP.IsLoopback() {
+		return
+	}
+	h.canaryMu.Lock()
+	if len(h.canaryHits) > 1024 {
+		h.canaryHits = map[string]map[uint16]time.Time{}
+	}
+	ports := h.canaryHits[ip]
+	if ports == nil {
+		ports = map[uint16]time.Time{}
+		h.canaryHits[ip] = ports
+	}
+	for p, at := range ports {
+		if obs.Time.Sub(at) > time.Minute {
+			delete(ports, p)
+		}
+	}
+	ports[obs.LocalPort] = obs.Time
+	sorted := make([]uint16, 0, len(ports))
+	for p := range ports {
+		sorted = append(sorted, p)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	h.canaryMu.Unlock()
+	rangeText := radar.CompressPorts(sorted, 12)
+	fields := map[string]string{"remoteIp": ip, "mac": "unknown", "portRange": rangeText,
+		"targetPort": strconv.Itoa(int(obs.LocalPort)), "detected": obs.Time.UTC().Format(time.RFC3339Nano), "sensor": obs.Sensor}
+	alert := model.Alert{Time: obs.Time, Severity: model.SevCritical, Category: model.AlertNetworkSweep,
+		Source: obs.Sensor, Title: model.T("Canary port contacted", "تم الاتصال بمنفذ الطُعم"),
+		Detail: model.T(fmt.Sprintf("%s contacted decoy port %d; ports in the last minute: %s", ip, obs.LocalPort, rangeText),
+			fmt.Sprintf("اتصل %s بمنفذ الطُعم %d؛ المنافذ خلال الدقيقة الأخيرة: %s", ip, obs.LocalPort, rangeText)), Fields: fields}
+	h.alerts.Raise("canary:"+ip, alert)
+	if h.Subscribers() > 0 {
+		h.Broadcast("canary", fields)
+	}
+	if h.rplat != nil {
+		go func() {
+			n, onLink, err := h.rplat.Resolve(ip)
+			if err != nil || n.MAC == "" {
+				return
+			}
+			h.alerts.Update("canary:"+ip, func(a *model.Alert) {
+				if a.Fields == nil {
+					a.Fields = map[string]string{}
+				}
+				a.Fields["mac"] = n.MAC
+				if !onLink {
+					a.Fields["gateway"] = n.IP
+					a.Fields["macScope"] = "gateway (remote host MAC unavailable off-link)"
+				}
+			})
+		}()
+	}
+	// Feed the breadth detector as well; one canary hit alone is never
+	// misrepresented as a multi-port sweep.
+	h.ObserveRadar(obs)
 }
 
 // Radar returns the connection-sweep detector.

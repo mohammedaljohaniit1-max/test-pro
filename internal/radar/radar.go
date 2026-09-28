@@ -22,6 +22,8 @@
 package radar
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -35,6 +37,7 @@ import (
 // Sensor identifiers.
 const (
 	SensorRaw      = "raw-syn"
+	SensorCanary   = "canary"
 	SensorTable    = "tcp-table"
 	SensorSelfTest = "self-test"
 )
@@ -768,6 +771,46 @@ func pad(n int) string {
 		s = "0" + s
 	}
 	return s
+}
+
+// StartCanaries binds only configured decoy ports. A listening socket can
+// observe completed TCP handshakes, NOT firewall-dropped SYNs. Raw capture
+// remains the sensor for packets rejected before the TCP stack. Bind errors
+// are returned per port so callers never mistake failed traps for protection.
+func StartCanaries(ctx context.Context, ports []uint16, onHit func(Observation)) map[uint16]error {
+	failures := make(map[uint16]error)
+	seen := make(map[uint16]bool)
+	for _, port := range ports {
+		if port == 0 || seen[port] {
+			continue
+		}
+		seen[port] = true
+		ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+		if err != nil {
+			failures[port] = err
+			continue
+		}
+		go func(port uint16, ln net.Listener) {
+			go func() { <-ctx.Done(); _ = ln.Close() }()
+			for {
+				conn, err := ln.Accept()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					continue
+				}
+				remote := conn.RemoteAddr().(*net.TCPAddr)
+				local := conn.LocalAddr().(*net.TCPAddr)
+				_ = conn.Close() // never read or respond with an application protocol
+				if remote.IP.IsLoopback() {
+					continue
+				}
+				onHit(Observation{Time: time.Now().UTC(), RemoteIP: remote.IP.String(), RemotePort: uint16(remote.Port), LocalIP: local.IP.String(), LocalPort: port, Sensor: SensorCanary})
+			}
+		}(port, ln)
+	}
+	return failures
 }
 
 // ActiveCount returns the number of currently active sweep incidents.

@@ -21,9 +21,13 @@ package netnames
 import (
 	"context"
 	"encoding/binary"
+	"encoding/xml"
 	"errors"
+	"io"
 	"math/rand"
 	"net"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,12 +36,15 @@ import (
 
 // Result holds every name found for one address.
 type Result struct {
-	IP        string            `json:"ip"`
-	Name      string            `json:"name,omitempty"`   // best name
-	Source    string            `json:"source,omitempty"` // netbios, mdns, dns
-	Workgroup string            `json:"workgroup,omitempty"`
-	Names     map[string]string `json:"names,omitempty"`
-	NBMAC     string            `json:"nbMac,omitempty"` // MAC reported inside the NBSTAT reply
+	IP          string            `json:"ip"`
+	Name        string            `json:"name,omitempty"`   // best name
+	Source      string            `json:"source,omitempty"` // netbios, mdns, dns
+	Workgroup   string            `json:"workgroup,omitempty"`
+	Names       map[string]string `json:"names,omitempty"`
+	NBMAC       string            `json:"nbMac,omitempty"` // MAC reported inside the NBSTAT reply
+	Model       string            `json:"model,omitempty"`
+	ModelSource string            `json:"modelSource,omitempty"`
+	Maker       string            `json:"maker,omitempty"`
 }
 
 // Resolver performs the lookups. The zero value is not usable; use New.
@@ -46,12 +53,14 @@ type Resolver struct {
 	NetBIOS    bool
 	MDNS       bool
 	DNS        bool
+	SSDP       bool
+	AppleTXT   bool
 	LookupAddr func(ctx context.Context, addr string) ([]string, error)
 }
 
 // New returns a resolver with all three methods enabled.
 func New() *Resolver {
-	return &Resolver{Timeout: 900 * time.Millisecond, NetBIOS: true, MDNS: true, DNS: true, LookupAddr: net.DefaultResolver.LookupAddr}
+	return &Resolver{Timeout: 900 * time.Millisecond, NetBIOS: true, MDNS: true, DNS: true, SSDP: true, AppleTXT: true, LookupAddr: net.DefaultResolver.LookupAddr}
 }
 
 // Resolve queries ip with every enabled method concurrently and returns the
@@ -93,6 +102,32 @@ func (r *Resolver) Resolve(ctx context.Context, ip string) Result {
 			}
 		}()
 	}
+	if r.SSDP && p.To4() != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			model, maker, name, err := QuerySSDP(ctx, ip, r.Timeout)
+			if err == nil {
+				mu.Lock()
+				if res.Model == "" {
+					res.Model, res.Maker, res.ModelSource = model, maker, "ssdp"
+				}
+				mu.Unlock()
+				set("ssdp", name)
+			}
+		}()
+	}
+	if r.AppleTXT {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if code, err := QueryAppleTXT(ctx, ip, r.Timeout); err == nil && code != "" {
+				mu.Lock()
+				res.Model, res.Maker, res.ModelSource = AppleModelName(code), "Apple", "bonjour-txt"
+				mu.Unlock()
+			}
+		}()
+	}
 	if r.DNS && r.LookupAddr != nil {
 		wg.Add(1)
 		go func() {
@@ -108,7 +143,7 @@ func (r *Resolver) Resolve(ctx context.Context, ip string) Result {
 		}()
 	}
 	wg.Wait()
-	for _, src := range []string{"netbios", "mdns", "dns"} {
+	for _, src := range []string{"netbios", "mdns", "ssdp", "dns"} {
 		if n := res.Names[src]; n != "" {
 			res.Name, res.Source = n, src
 			break
@@ -335,6 +370,182 @@ func QueryMDNSPTR(ctx context.Context, ip string, timeout time.Duration) (string
 		binary.BigEndian.PutUint16(pkt, id)
 	}
 	return ParsePTRReply(pkt, id)
+}
+
+// AppleModelName maps exact machine identifiers; unknown identifiers remain
+// unchanged rather than fabricating a product from an OUI. iPhone15,2 is
+// iPhone 14 Pro (not 15 Pro); the 15 Pro is iPhone16,1.
+func AppleModelName(code string) string {
+	known := map[string]string{
+		"iPhone15,2": "iPhone 14 Pro", "iPhone15,3": "iPhone 14 Pro Max",
+		"iPhone16,1": "iPhone 15 Pro", "iPhone16,2": "iPhone 15 Pro Max",
+		"iPhone17,1": "iPhone 16 Pro", "iPhone17,2": "iPhone 16 Pro Max",
+		"iPhone17,3": "iPhone 16", "iPhone17,4": "iPhone 16 Plus",
+		"MacBookAir10,1": "MacBook Air (M1)", "MacBookAir15,2": "MacBook Air (M3, 13-inch)",
+		"AppleTV11,1": "Apple TV 4K (2nd generation)",
+	}
+	if s := known[code]; s != "" {
+		return s
+	}
+	return code
+}
+
+// ParseAppleTXT walks DNS questions and all answer/additional records. TXT
+// strings must be length-prefixed, bounded by RDLENGTH and owned by an Apple
+// Bonjour service instance; arbitrary DNS bytes never become a device model.
+func ParseAppleTXT(pkt []byte) (string, error) {
+	if len(pkt) < 12 || pkt[2]&0x80 == 0 {
+		return "", ErrBadReply
+	}
+	qd := int(binary.BigEndian.Uint16(pkt[4:]))
+	counts := int(binary.BigEndian.Uint16(pkt[6:])) + int(binary.BigEndian.Uint16(pkt[8:])) + int(binary.BigEndian.Uint16(pkt[10:]))
+	if qd > 16 || counts > 128 {
+		return "", ErrBadReply
+	}
+	off := 12
+	for i := 0; i < qd; i++ {
+		var ok bool
+		off, ok = skipName(pkt, off)
+		if !ok || off+4 > len(pkt) {
+			return "", ErrBadReply
+		}
+		off += 4
+	}
+	for i := 0; i < counts; i++ {
+		name, ok := readName(pkt, off, 0)
+		if !ok {
+			return "", ErrBadReply
+		}
+		off, ok = skipName(pkt, off)
+		if !ok || off+10 > len(pkt) {
+			return "", ErrBadReply
+		}
+		typ, rdl := binary.BigEndian.Uint16(pkt[off:]), int(binary.BigEndian.Uint16(pkt[off+8:]))
+		off += 10
+		if off+rdl > len(pkt) {
+			return "", ErrBadReply
+		}
+		if typ == 16 && (strings.HasSuffix(strings.ToLower(name), "._airplay._tcp.local") || strings.HasSuffix(strings.ToLower(name), "._apple-mobdev2._tcp.local")) {
+			for pos := off; pos < off+rdl; {
+				l := int(pkt[pos])
+				pos++
+				if pos+l > off+rdl {
+					return "", ErrBadReply
+				}
+				k, v, found := strings.Cut(string(pkt[pos:pos+l]), "=")
+				pos += l
+				if found && (strings.EqualFold(k, "model") || strings.EqualFold(k, "am") || strings.EqualFold(k, "md")) && len(v) > 0 && len(v) <= 80 {
+					valid := true
+					for _, c := range v {
+						if c < 0x20 || c > 0x7e {
+							valid = false
+							break
+						}
+					}
+					if valid {
+						return v, nil
+					}
+				}
+			}
+		}
+		off += rdl
+	}
+	return "", ErrBadReply
+}
+
+// QueryAppleTXT sends targeted legacy-unicast mDNS queries, not a network
+// sweep. A responder may include TXT in the additional section of a PTR reply.
+func QueryAppleTXT(ctx context.Context, ip string, timeout time.Duration) (string, error) {
+	if net.ParseIP(ip) == nil {
+		return "", ErrBadReply
+	}
+	for _, service := range []string{"_apple-mobdev2._tcp.local", "_airplay._tcp.local"} {
+		q := BuildPTRQuery(uint16(rand.Intn(0xffff)), service)
+		pkt, err := udpExchange(ctx, net.JoinHostPort(ip, "5353"), q, timeout, func(b []byte) bool { return len(b) >= 12 && b[2]&0x80 != 0 })
+		if err == nil {
+			if code, err := ParseAppleTXT(pkt); err == nil {
+				return code, nil
+			}
+			// TXT often needs a second question directed at the PTR instance.
+			if instance, err := ParsePTRReply(pkt, binary.BigEndian.Uint16(pkt)); err == nil && strings.HasSuffix(strings.ToLower(instance), strings.ToLower(service)) {
+				q = BuildPTRQuery(uint16(rand.Intn(0xffff)), instance)
+				q[len(q)-3] = 16 // QTYPE TXT (instead of PTR 12)
+				if reply, err := udpExchange(ctx, net.JoinHostPort(ip, "5353"), q, timeout, func(b []byte) bool { return len(b) >= 12 && b[2]&0x80 != 0 }); err == nil {
+					if code, err := ParseAppleTXT(reply); err == nil {
+						return code, nil
+					}
+				}
+			}
+		}
+	}
+	return "", ErrBadReply
+}
+
+// QuerySSDP asks only the known LAN host for its UPnP descriptor. LOCATION
+// must point back to the same literal IP; redirects are disabled to avoid
+// using discovery responses as a general-purpose SSRF proxy.
+func QuerySSDP(ctx context.Context, ip string, timeout time.Duration) (model, maker, name string, err error) {
+	if net.ParseIP(ip) == nil {
+		return "", "", "", ErrBadReply
+	}
+	addr, err := net.ResolveUDPAddr("udp4", net.JoinHostPort(ip, "1900"))
+	if err != nil {
+		return "", "", "", err
+	}
+	c, err := net.DialUDP("udp4", nil, addr)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer c.Close()
+	deadline := time.Now().Add(timeout)
+	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
+	}
+	_ = c.SetDeadline(deadline)
+	_, err = c.Write([]byte("M-SEARCH * HTTP/1.1\r\nHOST: " + net.JoinHostPort(ip, "1900") + "\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: upnp:rootdevice\r\n\r\n"))
+	if err != nil {
+		return "", "", "", err
+	}
+	buf := make([]byte, 4096)
+	n, _, err := c.ReadFromUDP(buf)
+	if err != nil {
+		return "", "", "", err
+	}
+	var location string
+	for _, line := range strings.Split(string(buf[:n]), "\r\n") {
+		if strings.HasPrefix(strings.ToLower(line), "location:") {
+			location = strings.TrimSpace(line[len("location:"):])
+			break
+		}
+	}
+	u, err := url.Parse(location)
+	if err != nil || u.Scheme != "http" || net.ParseIP(u.Hostname()) == nil || !net.ParseIP(u.Hostname()).Equal(net.ParseIP(ip)) || u.User != nil {
+		return "", "", "", ErrBadReply
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return "", "", "", err
+	}
+	client := &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", "", "", ErrBadReply
+	}
+	var doc struct {
+		Device struct {
+			Model        string `xml:"modelName"`
+			Manufacturer string `xml:"manufacturer"`
+			Friendly     string `xml:"friendlyName"`
+		} `xml:"device"`
+	}
+	if err := xml.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&doc); err != nil {
+		return "", "", "", err
+	}
+	return strings.TrimSpace(doc.Device.Model), strings.TrimSpace(doc.Device.Manufacturer), strings.TrimSpace(doc.Device.Friendly), nil
 }
 
 func skipName(pkt []byte, off int) (int, bool) {

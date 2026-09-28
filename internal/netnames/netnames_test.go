@@ -81,6 +81,35 @@ func TestPTR(t *testing.T) {
 	}
 }
 
+func TestAppleTXTModels(t *testing.T) {
+	if AppleModelName("iPhone15,2") != "iPhone 14 Pro" || AppleModelName("iPhone16,1") != "iPhone 15 Pro" || AppleModelName("MacBookAir10,1") != "MacBook Air (M1)" {
+		t.Fatal("incorrect Apple machine identifier mapping")
+	}
+	q := BuildPTRQuery(17, "_airplay._tcp.local")
+	q[2] = 0x84
+	q[7] = 1 // answer count
+	var name []byte
+	for _, part := range []string{"Living Room", "_airplay", "_tcp", "local"} {
+		name = append(name, byte(len(part)))
+		name = append(name, part...)
+	}
+	name = append(name, 0)
+	item := []byte("model=iPhone16,1")
+	packet := append(q, name...)
+	packet = append(packet, 0, 16, 0, 1, 0, 0, 0, 10, 0, byte(len(item)+1), byte(len(item)))
+	packet = append(packet, item...)
+	if v, err := ParseAppleTXT(packet); err != nil || v != "iPhone16,1" {
+		t.Fatalf("TXT=%q err=%v", v, err)
+	}
+	if _, err := ParseAppleTXT(packet[:len(packet)-1]); err == nil {
+		t.Fatal("accepted truncated TXT")
+	}
+	q[7] = 0
+	if _, err := ParseAppleTXT(q); err == nil {
+		t.Fatal("accepted no TXT")
+	}
+}
+
 // End to end against a fake NBSTAT responder on loopback.
 func TestResolveLoopback(t *testing.T) {
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")

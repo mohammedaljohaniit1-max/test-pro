@@ -6,7 +6,7 @@
 <meta name="syspulse-token" content="{{TOKEN}}">
 <meta name="syspulse-mode" content="{{MODE}}">
 <meta name="color-scheme" content="dark">
-<title>SysPulse 4.0 — Windows Observability &amp; Reliability Control Plane</title>
+<title>SysPulse 5.0 — Windows Observability &amp; Reliability Control Plane</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/assets/app.css">
 <link rel="stylesheet" href="/assets/v4.css">
@@ -50,6 +50,7 @@
         <button class="nav-item" data-view="health" title=""><svg class="ico"><use href="#i-health"/></svg><span class="nl" data-i18n="nav.health"></span> <span class="badge ok" id="b-health">0</span></button>
         <button class="nav-item" data-view="alerts" title=""><svg class="ico"><use href="#i-alert"/></svg><span class="nl" data-i18n="nav.alerts"></span> <span class="badge crit" id="b-alerts">0</span></button>
         <button class="nav-item" data-view="rules" title=""><svg class="ico"><use href="#i-rules"/></svg><span class="nl" data-i18n="nav.rules"></span> <span class="badge crit zero" id="b-rules">0</span></button>
+        <button class="nav-item" data-view="care" title=""><svg class="ico"><use href="#i-shield"/></svg><span class="nl">System Care &amp; Maintenance / الصيانة والتحسين</span></button>
       </div>
       <div class="nav-group" data-group="host">
         <div class="nav-gh" data-i18n="grp.host"></div>
@@ -61,6 +62,7 @@
         <div class="nav-gh" data-i18n="grp.net"></div>
         <button class="nav-item" data-view="sockets" title=""><svg class="ico"><use href="#i-sockets"/></svg><span class="nl" data-i18n="nav.sockets"></span> <span class="badge" id="b-net">0</span></button>
         <button class="nav-item" data-view="bandwidth" title=""><svg class="ico"><use href="#i-bandwidth"/></svg><span class="nl" data-i18n="nav.bandwidth"></span> <span class="badge" id="b-if">0</span></button>
+        <button class="nav-item" data-view="flow" title=""><svg class="ico"><use href="#i-sockets"/></svg><span class="nl">Live Network Flow / تدفق الشبكة</span></button>
         <button class="nav-item" data-view="devices" title=""><svg class="ico"><use href="#i-devices"/></svg><span class="nl" data-i18n="nav.devices"></span> <span class="badge" id="b-dev">0</span></button>
         <button class="nav-item" data-view="radar" title=""><svg class="ico"><use href="#i-radar"/></svg><span class="nl" data-i18n="nav.radar"></span> <span class="badge crit" id="b-radar">0</span></button>
       </div>
@@ -315,6 +317,22 @@
       <div class="foot" id="net-foot"></div>
     </div>
   </section>
+  <section id="view-flow" class="panel" data-view="flow">
+    <div class="view-head"><div><h1>Live Network Flow / تدفق الشبكة المباشر</h1><p class="muted">Windows TCP EStats payload counters provide per-connection receive/send rates when elevated. New flows require two samples; unsupported or inaccessible counters show the reason.</p></div></div>
+    <div class="box glass"><div class="toolbar"><h3>WAN ISP / مزود خدمة الإنترنت</h3><span id="flow-wan" class="muted">Checking…</span></div>
+      <p class="muted small">Public IP and remote-country attribution use the ipwho.is HTTPS service on demand (maximum one remote lookup per 10 seconds).</p></div>
+    <div class="box glass"><div class="toolbar"><h3>Active connections / الاتصالات النشطة</h3><span id="flow-count" class="muted"></span></div>
+      <div class="tablewrap"><table class="grid"><thead><tr><th>Application / التطبيق</th><th>Direction / الاتجاه</th><th>Remote / الوجهة</th><th>Country / الدولة</th><th>ISP / المزود</th><th>Protocol / البروتوكول</th><th>Throughput / التدفق</th><th>Classification / التصنيف</th></tr></thead><tbody id="flow-rows"></tbody></table></div></div>
+  </section>
+  <section id="view-care" class="panel" data-view="care">
+    <div class="view-head"><div><h1>System Care &amp; Maintenance / الصيانة والتحسين</h1><p class="muted">Windows administration. Actions execute on this machine under your current privileges; results are reported verbatim.</p></div></div>
+    <div class="box glass"><h3>Automated Action Advisor / المستشار الآلي</h3><div id="care-advice" aria-live="polite"></div></div>
+    <div class="care-grid" id="care-actions">
+      <article class="box glass"><h3>Cache &amp; Junk Purge / تنظيف الملفات المؤقتة</h3><p>Delete current user's TEMP entries and WER reports; empty the Recycle Bin. Locked files remain untouched.</p><button class="btn" data-care="purge">Review and purge</button><pre id="care-purge" class="care-output" aria-live="polite"></pre></article>
+      <article class="box glass"><h3>Network Resolver Flush / مسح ذاكرة DNS</h3><p>Run the native Windows ipconfig /flushdns command.</p><button class="btn" data-care="dns">Review and flush</button><pre id="care-dns" class="care-output" aria-live="polite"></pre></article>
+      <article class="box glass"><h3>System Integrity Diagnostic / فحص سلامة النظام</h3><p>Run DISM ScanHealth followed by SFC scannow. Administrative rights may be required; this may take several minutes.</p><button class="btn" data-care="integrity">Review and scan</button><pre id="care-integrity" class="care-output" aria-live="polite"></pre></article>
+    </div>
+  </section>
   <section id="view-bandwidth" class="panel" data-view="bandwidth">
     <div class="view-head"><div><h1 data-i18n="nav.bandwidth"></h1><p class="muted" data-i18n="desc.bandwidth"></p></div><div class="view-actions" id="va-bandwidth"></div></div>
     <div class="cards">
@@ -538,6 +556,7 @@
       <div class="toolbar">
         <h3><span data-i18n="sw.upgrades">Available upgrades</span> <span class="muted" id="sw-when"></span></h3>
         <button class="btn" id="sw-refresh" data-i18n="sw.check">Check for updates</button>
+        <button class="btn ghost" id="manifest-refresh">Audit official publisher releases / فحص إصدارات الناشرين</button>
       </div>
       <div class="note" id="sw-err" hidden></div>
       <div class="tablewrap"><table class="grid" id="up-table">

@@ -1007,4 +1007,70 @@
   });
   window.addEventListener("resize", () => SP.renderAll());
   labelNav();
+
+  // 5.0: Maintenance jobs and measured socket-flow view. Never invent
+  // per-socket rates when only interface byte counters are available.
+  let flowData = null, careJobs = {}, flowBusy = false;
+  const careLabels = { purge: "Cache & Junk Purge", dns: "Network Resolver Flush", integrity: "System Integrity Diagnostic" };
+  function renderCare() {
+    Object.entries(careLabels).forEach(([action]) => {
+      const job = careJobs[action], out = $("care-" + action), btn = document.querySelector(`[data-care="${action}"]`);
+      if (btn) btn.disabled = MODECARE() || job?.status === "running";
+      if (out) out.textContent = job ? `${job.status.toUpperCase()} · ${new Date(job.started).toLocaleString()}\n${job.output || ""}${job.error ? "\nError: " + job.error : ""}` : "";
+    });
+    const m = S.metrics, advice = $("care-advice");
+    if (!advice) return;
+    const disk = Math.max(0, ...(m?.disks || []).map((d) => d.percent));
+    const commit = m?.commitTotal ? m.commitUsed / m.commitTotal * 100 : 0;
+    const notes = [];
+    if (commit > 80) notes.push(`Commit charge ${commit.toFixed(0)}%: inspect the Processes view for high private-byte use. Purging disk files does not reduce commit charge.`);
+    if (disk > 85) notes.push(`Disk usage ${disk.toFixed(0)}%: review the temporary-file purge below. It only removes your own TEMP and WER data.`);
+    advice.textContent = notes.join("\n") || "No immediate maintenance recommendation from current disk and commit measurements.";
+  }
+  const MODECARE = () => document.querySelector('meta[name="syspulse-mode"]')?.content === "synthetic";
+  function renderFlow() {
+    if (!flowData) return;
+    const wan = flowData.wan || {};
+    $("flow-wan").textContent = wan.ip ? `${wan.isp || "ISP unavailable"} · ${wan.ip} · ${wan.country || "country unavailable"}` : "Public ISP data unavailable / بيانات المزود غير متوفرة";
+    $("flow-count").textContent = String((flowData.flows || []).length);
+    $("flow-rows").innerHTML = (flowData.flows || []).map((f) => `<tr><td>${esc(f.application || "Unknown")}</td><td>${esc(f.direction)}</td><td><bdi dir="ltr">${esc(f.remote)}</bdi></td><td>${esc(f.country || "—")}</td><td>${esc(f.isp || "—")}</td><td>${esc(f.protocol)}</td><td>${f.throughputAvailable ? `<bdi dir="ltr">↓ ${fmtRate(f.inBps)} · ↑ ${fmtRate(f.outBps)}</bdi>` : `<span class="muted" title="${esc(f.rateError || "TCP statistics pending")}">${esc(f.rateError || "Collecting TCP statistics…")}</span>`}</td><td>${esc(f.classification)}</td></tr>`).join("") || `<tr><td colspan="8">No established connections / لا توجد اتصالات نشطة</td></tr>`;
+  }
+  async function refreshFlow() {
+    if (flowBusy || document.hidden || SP.active !== "flow") return;
+    flowBusy = true;
+    try { flowData = await api("/api/flow"); renderFlow(); }
+    catch (e) { $("flow-count").textContent = e.message; }
+    finally { flowBusy = false; }
+  }
+  async function refreshCare() {
+    try { const data = await api("/api/care"); careJobs = data.jobs || {}; renderCare(); }
+    catch (e) { toast(e.message); }
+  }
+  document.querySelectorAll("[data-care]").forEach((btn) => btn.addEventListener("click", async () => {
+    const action = btn.dataset.care;
+    const ok = await confirmBox(careLabels[action], `Run ${careLabels[action]} on this Windows host? This action changes local system state and may require administrator rights.`);
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      const job = await api(`/api/care/${action}`, { method: "POST", body: JSON.stringify({ confirm: action }) });
+      careJobs[action] = job; renderCare();
+    } catch (e) { toast(e.message); btn.disabled = false; }
+  }));
+  SP.onMessage((type, d) => { if (type === "care") { careJobs[d.action] = d; renderCare(); } });
+  SP.onView((view) => { if (view === "care") refreshCare(); if (view === "flow") refreshFlow(); });
+  SP.onRender((view) => { if (view === "care") renderCare(); });
+  setInterval(refreshFlow, 6000);
+  $("manifest-refresh")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+      const result = await api("/api/software/manifests", { method: "POST", body: "{}" });
+      const lines = (result.audits || []).map((x) => `<tr><td>${esc(x.name)}</td><td>${esc(x.installed)}</td><td>${esc(x.latest || "—")}</td><td>${x.error ? `<span class="muted">${esc(x.error)}</span>` : x.update ? "Update available" : "Current"}</td><td><a href="${esc(x.source)}" target="_blank" rel="noopener noreferrer">Official publisher</a></td></tr>`).join("");
+      const old = $("manifest-results"); if (old) old.remove();
+      const box = document.createElement("div"); box.id = "manifest-results"; box.className = "box glass";
+      box.innerHTML = `<h3>Official release manifest audit / فحص الإصدارات الرسمية</h3><p class="muted">${esc(result.note)}</p><div class="tablewrap"><table class="grid"><thead><tr><th>Product</th><th>Installed</th><th>Latest</th><th>Status</th><th>Source</th></tr></thead><tbody>${lines || '<tr><td colspan="5">No supported installed products found in Windows inventory.</td></tr>'}</tbody></table></div>`;
+      btn.closest(".box").after(box);
+    } catch (e) { toast(e.message); }
+    finally { btn.disabled = false; }
+  });
 })();

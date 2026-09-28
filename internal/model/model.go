@@ -183,27 +183,29 @@ type Listener struct {
 // Device is one host discovered on the local network (ARP / neighbour table)
 // enriched with its hardware vendor and resolved host name.
 type Device struct {
-	IP         string            `json:"ip"`
-	MAC        string            `json:"mac"`
-	Vendor     string            `json:"vendor,omitempty"`     // brand, e.g. "Apple"
-	VendorFull string            `json:"vendorFull,omitempty"` // registered organisation name
-	OUI        string            `json:"oui,omitempty"`        // matched prefix
-	Registry   string            `json:"registry,omitempty"`   // MA-L / MA-M / MA-S
-	Class      string            `json:"class,omitempty"`      // pc, mobile, network, printer, iot, tv, console, vm, sbc
-	RandomMAC  bool              `json:"randomMac,omitempty"`  // locally administered / private address
-	Hostname   string            `json:"hostname,omitempty"`
-	NameSource string            `json:"nameSource,omitempty"` // netbios, mdns, dns
-	Names      map[string]string `json:"names,omitempty"`      // every name found, keyed by source
-	Workgroup  string            `json:"workgroup,omitempty"`
-	Interface  string            `json:"interface,omitempty"`
-	IfIndex    uint32            `json:"ifIndex,omitempty"`
-	Type       string            `json:"type,omitempty"` // dynamic, static, …
-	Gateway    bool              `json:"gateway,omitempty"`
-	Self       bool              `json:"self,omitempty"`
-	FirstSeen  int64             `json:"firstSeen"`
-	LastSeen   int64             `json:"lastSeen"`
-	Resolved   int64             `json:"resolved,omitempty"` // unix ms of the last name lookup
-	Resolving  bool              `json:"resolving,omitempty"`
+	IP          string            `json:"ip"`
+	MAC         string            `json:"mac"`
+	Vendor      string            `json:"vendor,omitempty"`     // brand, e.g. "Apple"
+	VendorFull  string            `json:"vendorFull,omitempty"` // registered organisation name
+	Model       string            `json:"model,omitempty"`      // device-advertised SSDP/Bonjour descriptor
+	ModelSource string            `json:"modelSource,omitempty"`
+	OUI         string            `json:"oui,omitempty"`       // matched prefix
+	Registry    string            `json:"registry,omitempty"`  // MA-L / MA-M / MA-S
+	Class       string            `json:"class,omitempty"`     // pc, mobile, network, printer, iot, tv, console, vm, sbc
+	RandomMAC   bool              `json:"randomMac,omitempty"` // locally administered / private address
+	Hostname    string            `json:"hostname,omitempty"`
+	NameSource  string            `json:"nameSource,omitempty"` // netbios, mdns, dns
+	Names       map[string]string `json:"names,omitempty"`      // every name found, keyed by source
+	Workgroup   string            `json:"workgroup,omitempty"`
+	Interface   string            `json:"interface,omitempty"`
+	IfIndex     uint32            `json:"ifIndex,omitempty"`
+	Type        string            `json:"type,omitempty"` // dynamic, static, …
+	Gateway     bool              `json:"gateway,omitempty"`
+	Self        bool              `json:"self,omitempty"`
+	FirstSeen   int64             `json:"firstSeen"`
+	LastSeen    int64             `json:"lastSeen"`
+	Resolved    int64             `json:"resolved,omitempty"` // unix ms of the last name lookup
+	Resolving   bool              `json:"resolving,omitempty"`
 }
 
 // ProcessDetail is the on-demand deep inspection of one process.
