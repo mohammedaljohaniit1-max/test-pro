@@ -4,7 +4,7 @@ rem  SysPulse build script
 rem  Produces a single self-contained dist\syspulse.exe (web UI embedded).
 rem
 rem  Usage:  build.bat [version] [arch]
-rem          build.bat                -> version 4.0.0, amd64
+rem          build.bat                -> version 5.1.0, amd64
 rem          build.bat 1.2.0 arm64    -> version 1.2.0, arm64
 rem  Env:    SKIP_TESTS=1 to skip go vet / go test
 rem  Needs:  Go 1.23+ on PATH (https://go.dev/dl/)
@@ -12,7 +12,7 @@ rem ---------------------------------------------------------------------------
 setlocal EnableExtensions
 
 set "VERSION=%~1"
-if "%VERSION%"=="" set "VERSION=4.0.0"
+if "%VERSION%"=="" set "VERSION=5.1.0"
 set "ARCH=%~2"
 if "%ARCH%"=="" set "ARCH=amd64"
 set "MODULE=github.com/mohammedaljohaniit1-max/test-pro"

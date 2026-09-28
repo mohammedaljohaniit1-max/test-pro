@@ -24,6 +24,41 @@ func (fakeRadarPlat) Resolve(ip string) (radar.Neighbor, bool, error) {
 	return radar.Neighbor{IP: ip, MAC: "00-0C-29-7D-E4-A0", Interface: "Ethernet"}, true, nil
 }
 
+func TestBlockedObservation5157(t *testing.T) {
+	base := model.Event{Channel: "Security", Provider: "Microsoft-Windows-Security-Auditing", EventID: 5157,
+		Time: time.Unix(1700000000, 0), Data: map[string]string{
+			"Direction": "%%14592", "Protocol": "6", "SourceAddress": "192.168.1.42", "SourcePort": "8443",
+			"DestAddress": "192.168.1.66", "DestPort": "50000",
+		}}
+	local := []string{"192.168.1.42"}
+	obs, ok := BlockedObservation(base, local)
+	if !ok || obs.RemoteIP != "192.168.1.66" || obs.LocalPort != 8443 || obs.RemotePort != 50000 || obs.Sensor != "wfp-5157" {
+		t.Fatalf("incorrect WFP observation: %+v %v", obs, ok)
+	}
+	base.Data["SourceAddress"], base.Data["DestAddress"] = base.Data["DestAddress"], base.Data["SourceAddress"]
+	base.Data["SourcePort"], base.Data["DestPort"] = base.Data["DestPort"], base.Data["SourcePort"]
+	obs, ok = BlockedObservation(base, local)
+	if !ok || obs.RemoteIP != "192.168.1.66" || obs.LocalPort != 8443 {
+		t.Fatalf("reversed WFP endpoints: %+v %v", obs, ok)
+	}
+	for _, change := range []func(*model.Event){
+		func(e *model.Event) { e.Data["Direction"] = "%%14593" },
+		func(e *model.Event) { e.Data["Protocol"] = "17" },
+		func(e *model.Event) { e.Data["DestAddress"] = "8.8.8.8" },
+		func(e *model.Event) { e.EventID = 5156 },
+	} {
+		copy := base
+		copy.Data = make(map[string]string, len(base.Data))
+		for k, v := range base.Data {
+			copy.Data[k] = v
+		}
+		change(&copy)
+		if _, ok := BlockedObservation(copy, local); ok {
+			t.Fatalf("false positive: %+v", copy)
+		}
+	}
+}
+
 // A remote host opening accepted connections to 15 listening ports shows up
 // as new TCP-table rows; the hub must turn that into a sweep incident with
 // MAC attribution from the ARP table and a critical alert.

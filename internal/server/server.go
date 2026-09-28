@@ -35,7 +35,7 @@ import (
 var webFS embed.FS
 
 // Version is set at build time.
-var Version = "4.0.0"
+var Version = "5.1.0"
 
 // SoftwareBackend abstracts registry/winget access for tests.
 type SoftwareBackend interface {
@@ -46,11 +46,12 @@ type SoftwareBackend interface {
 
 // Server is the HTTP front end.
 type Server struct {
-	Hub      *hub.Hub
-	Software SoftwareBackend
-	Log      *slog.Logger
-	Addr     string // e.g. 127.0.0.1:9099
-	token    string
+	Hub         *hub.Hub
+	FlowSampler FlowSampler // optional Windows EStats sampler
+	Software    SoftwareBackend
+	Log         *slog.Logger
+	Addr        string // e.g. 127.0.0.1:9099
+	token       string
 
 	// Synthetic is true only for the explicit -synthetic UI-review mode;
 	// the dashboard then shows a "SIMULATED DATA" badge.
@@ -67,6 +68,13 @@ type Server struct {
 	upsRunning bool
 	upgrading  map[string]bool
 	results    []UpgradeResult
+	careMu     sync.Mutex
+	careJobs   map[string]CareJob
+	geoMu      sync.Mutex
+	geo        map[string]GeoRecord
+	geoLast    time.Time
+	wan        GeoRecord
+	wanAt      time.Time
 }
 
 // UpgradeResult records one upgrade attempt.
@@ -285,8 +293,17 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		defer close(gone)
 		for {
 			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
-			if _, _, err := c.ReadMessage(); err != nil {
+			op, payload, err := c.ReadMessage()
+			if err != nil {
 				return
+			}
+			if op == ws.OpText && len(payload) < 128 {
+				var status struct {
+					Visible *bool `json:"visible"`
+				}
+				if json.Unmarshal(payload, &status) == nil && status.Visible != nil {
+					sub.SetVisible(*status.Visible)
+				}
 			}
 		}
 	}()

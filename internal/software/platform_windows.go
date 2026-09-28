@@ -6,11 +6,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -137,10 +141,127 @@ func InventoryAll() ([]model.App, error) {
 		k.Close()
 	}
 	apps := FilterAll(raw)
+	apps = append(apps, scanPortable(apps)...)
 	if len(apps) == 0 && firstErr != nil {
 		return nil, firstErr
 	}
 	return apps, nil
+}
+
+// scanPortable performs a bounded, on-demand, read-only scan of known
+// executable locations. Reparse points are not traversed; no binary runs.
+func scanPortable(indexed []model.App) []model.App {
+	roots := []string{
+		filepath.Join(os.Getenv("USERPROFILE"), "Downloads"),
+		filepath.Join(os.Getenv("APPDATA"), "Programs"),
+		`C:\Tools`,
+	}
+	seen := map[string]bool{}
+	for _, a := range indexed {
+		if a.InstallLocation != "" {
+			seen[strings.ToLower(filepath.Clean(a.InstallLocation))] = true
+		}
+	}
+	var out []model.App
+	visited := 0
+	var walk func(string, int)
+	walk = func(dir string, depth int) {
+		if visited >= 500 || len(out) >= 150 || depth > 2 {
+			return
+		}
+		info, err := os.Lstat(dir)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if visited >= 500 || len(out) >= 150 {
+				return
+			}
+			visited++
+			if e.Type()&os.ModeSymlink != 0 {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			if e.IsDir() {
+				walk(path, depth+1)
+				continue
+			}
+			if !strings.EqualFold(filepath.Ext(e.Name()), ".exe") {
+				continue
+			}
+			if meta, err := os.Lstat(path); err != nil || !meta.Mode().IsRegular() || meta.Size() > 1<<30 {
+				continue
+			}
+			v, name, publisher, err := executableVersion(path)
+			if err != nil || v == "" {
+				continue
+			} // no real PE resource: do not infer a version
+			if name == "" {
+				name = strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+			}
+			key := strings.ToLower(filepath.Clean(path))
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			scope := "user"
+			if strings.HasPrefix(strings.ToLower(path), `c:\tools\`) {
+				scope = "machine"
+			}
+			out = append(out, model.App{Name: name, Version: v, Publisher: publisher, Scope: scope,
+				UninstallKey: "portable:" + path, InstallLocation: filepath.Dir(path), DisplayIcon: path,
+				Kind: "app", Source: "portable-pe"})
+		}
+	}
+	for _, root := range roots {
+		// An unset env var must never turn a broad relative path into a scan.
+		if !filepath.IsAbs(root) {
+			continue
+		}
+		walk(root, 0)
+	}
+	return out
+}
+
+// executableVersion retrieves the version and publisher from the signed or
+// unsigned PE's actual VERSIONINFO resource (not its filename).
+func executableVersion(path string) (version, name, publisher string, err error) {
+	var unused windows.Handle
+	size, err := windows.GetFileVersionInfoSize(path, &unused)
+	if err != nil || size == 0 || size > 1<<20 {
+		return "", "", "", fmt.Errorf("no bounded PE version resource: %v", err)
+	}
+	buf := make([]byte, size)
+	if err := windows.GetFileVersionInfo(path, 0, size, unsafe.Pointer(&buf[0])); err != nil {
+		return "", "", "", err
+	}
+	var fixed *windows.VS_FIXEDFILEINFO
+	var length uint32
+	if err := windows.VerQueryValue(unsafe.Pointer(&buf[0]), `\`, unsafe.Pointer(&fixed), &length); err != nil || fixed == nil ||
+		length < uint32(unsafe.Sizeof(*fixed)) || fixed.Signature != 0xfeef04bd {
+		return "", "", "", errors.New("invalid VS_FIXEDFILEINFO")
+	}
+	vms, vls := fixed.FileVersionMS, fixed.FileVersionLS
+	version = fmt.Sprintf("%d.%d.%d.%d", vms>>16, vms&0xffff, vls>>16, vls&0xffff)
+	var translation *byte
+	if windows.VerQueryValue(unsafe.Pointer(&buf[0]), `\VarFileInfo\Translation`, unsafe.Pointer(&translation), &length) != nil || translation == nil || length < 4 {
+		return version, "", "", nil
+	}
+	lang, codePage := *(*uint16)(unsafe.Pointer(translation)), *(*uint16)(unsafe.Add(unsafe.Pointer(translation), 2))
+	query := func(key string) string {
+		sub := fmt.Sprintf(`\StringFileInfo\%04X%04X\%s`, lang, codePage, key)
+		var text *uint16
+		var n uint32
+		if windows.VerQueryValue(unsafe.Pointer(&buf[0]), sub, unsafe.Pointer(&text), &n) != nil || text == nil || n == 0 || n > 256 {
+			return ""
+		}
+		return strings.TrimSpace(windows.UTF16ToString(unsafe.Slice(text, n)))
+	}
+	return version, query("ProductName"), query("CompanyName"), nil
 }
 
 func wingetPath() (string, error) {

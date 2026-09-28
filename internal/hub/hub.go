@@ -56,10 +56,10 @@ type Config struct {
 
 func (c *Config) defaults() {
 	if c.MetricsEvery <= 0 {
-		c.MetricsEvery = time.Second
+		c.MetricsEvery = 4 * time.Second
 	}
 	if c.NetEvery <= 0 {
-		c.NetEvery = time.Second
+		c.NetEvery = 4 * time.Second
 	}
 	if c.EventsEvery <= 0 {
 		c.EventsEvery = 15 * time.Second
@@ -71,7 +71,7 @@ func (c *Config) defaults() {
 		c.MaxEvents = 2000
 	}
 	if c.ServicesEvery <= 0 {
-		c.ServicesEvery = 5 * time.Second
+		c.ServicesEvery = 30 * time.Second
 	}
 	if len(c.Channels) == 0 {
 		c.Channels = []string{"System", "Application"}
@@ -103,9 +103,10 @@ type Hub struct {
 
 // Subscriber is one connected dashboard.
 type Subscriber struct {
-	C    chan []byte
-	done chan struct{}
-	once sync.Once
+	C       chan []byte
+	done    chan struct{}
+	visible atomic.Bool
+	once    sync.Once
 }
 
 // New wires a hub. events may be nil (event log unavailable).
@@ -121,6 +122,7 @@ func New(cfg Config, log *slog.Logger, sys *sysmon.Monitor, procs *procmon.Monit
 // Subscribe registers a subscriber with a bounded queue.
 func (h *Hub) Subscribe() *Subscriber {
 	s := &Subscriber{C: make(chan []byte, 64), done: make(chan struct{})}
+	s.visible.Store(true)
 	h.mu.Lock()
 	h.subs[s] = struct{}{}
 	h.mu.Unlock()
@@ -145,7 +147,34 @@ func (h *Hub) Subscribers() int {
 	return len(h.subs)
 }
 
-// Dropped returns the number of subscribers evicted for being slow.
+// SetVisible updates a dashboard's browser visibility without changing other clients.
+func (s *Subscriber) SetVisible(v bool) { s.visible.Store(v) }
+
+// SamplingInterval scales collection while nobody is actively viewing.
+// Configured intervals are floors; sensor callbacks remain independent.
+func (h *Hub) SamplingInterval(base time.Duration) time.Duration {
+	// Explicit subsecond cadences are used by diagnostics/tests; do not
+	// silently override them with the interactive production policy.
+	if base < time.Second {
+		return base
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for s := range h.subs {
+		if s.visible.Load() {
+			return base
+		}
+	}
+	if len(h.subs) == 0 && base < 30*time.Second {
+		return 30 * time.Second
+	}
+	if base < 20*time.Second {
+		return 20 * time.Second
+	}
+	return base
+}
+
+// Dropped returns the number of subscribers evicted for being too slow.
 func (h *Hub) Dropped() uint64 { return h.dropped.Load() }
 
 // Broadcast encodes msg once and queues it for every subscriber.
@@ -185,11 +214,13 @@ func (h *Hub) Run(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 			fn()
-			t := time.NewTicker(every)
-			defer t.Stop()
 			for {
+				t := time.NewTimer(h.SamplingInterval(every))
 				select {
 				case <-ctx.Done():
+					if !t.Stop() {
+						<-t.C
+					}
 					return
 				case <-t.C:
 					fn()
@@ -201,6 +232,11 @@ func (h *Hub) Run(ctx context.Context) {
 	loop(h.cfg.NetEvery, h.collectNet)
 	if h.events != nil {
 		loop(h.cfg.EventsEvery, h.collectEvents)
+		if _, ok := h.events.(interface {
+			QueryXPath(string, string, int, bool) ([]model.Event, error)
+		}); ok {
+			loop(4*time.Second, h.collectBlocked)
+		}
 	}
 	h.runV4(loop)
 	wg.Wait()

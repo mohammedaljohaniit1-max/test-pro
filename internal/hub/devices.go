@@ -92,6 +92,7 @@ func (h *Hub) updateDevices(ns []radar.Neighbor) {
 			d.m[n.IP] = dev
 		}
 		if dev.MAC != n.MAC {
+			dev.Model, dev.ModelSource = "", "" // do not reuse a previous occupant's model
 			dev.MAC = n.MAC
 			dev.Vendor, dev.VendorFull, dev.OUI, dev.Registry, dev.Class, dev.RandomMAC = "", "", "", "", "", false
 			if v, ok := oui.Lookup(n.MAC); ok {
@@ -145,6 +146,12 @@ func (h *Hub) resolveDevice(res NameResolver, ip string) {
 		}
 		if r.Workgroup != "" {
 			dev.Workgroup = r.Workgroup
+		}
+		if r.Model != "" {
+			dev.Model, dev.ModelSource = r.Model, r.ModelSource
+			if r.Maker != "" {
+				dev.Vendor = r.Maker
+			}
 		}
 	}
 	d.mu.Unlock()
