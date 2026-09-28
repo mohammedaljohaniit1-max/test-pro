@@ -165,3 +165,74 @@ func (s *SystemPlatform) Info() (string, string) { return s.host, s.osName }
 
 // Cores returns the logical processor count.
 func (SystemPlatform) Cores() int { return runtime.NumCPU() }
+
+// ---------------------------------------------------------------------------
+// SysPulse 4.0: per-core CPU and memory composition.
+// ---------------------------------------------------------------------------
+
+var (
+	ntdll                        = windows.NewLazySystemDLL("ntdll.dll")
+	procNtQuerySystemInformation = ntdll.NewProc("NtQuerySystemInformation")
+)
+
+// systemProcessorPerformanceInformation mirrors
+// SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION (48 bytes on 32- and 64-bit).
+type systemProcessorPerformanceInformation struct {
+	IdleTime       int64
+	KernelTime     int64 // includes idle time
+	UserTime       int64
+	DpcTime        int64
+	InterruptTime  int64
+	InterruptCount uint32
+	_              uint32
+}
+
+const systemProcessorPerformanceInformationClass = 8
+
+// CoreTimes returns cumulative counters for every logical processor of the
+// calling thread's processor group (Windows groups hold at most 64 logical
+// processors). The buffer is always sized for 64 entries: the kernel fails
+// with STATUS_INFO_LENGTH_MISMATCH when it is smaller than the group, and
+// runtime.NumCPU reflects the process affinity mask, which may be narrower.
+func (SystemPlatform) CoreTimes() ([]CPUTimes, error) {
+	var buf [64]systemProcessorPerformanceInformation
+	var ret uint32
+	size := uint32(unsafe.Sizeof(buf))
+	st, _, _ := procNtQuerySystemInformation.Call(systemProcessorPerformanceInformationClass,
+		uintptr(unsafe.Pointer(&buf[0])), uintptr(size), uintptr(unsafe.Pointer(&ret)))
+	if st != 0 {
+		return nil, fmt.Errorf("NtQuerySystemInformation(SystemProcessorPerformanceInformation): NTSTATUS 0x%08X", uint32(st))
+	}
+	got := int(ret / uint32(unsafe.Sizeof(buf[0])))
+	if got <= 0 || got > len(buf) {
+		return nil, fmt.Errorf("NtQuerySystemInformation returned %d bytes", ret)
+	}
+	out := make([]CPUTimes, got)
+	for i := 0; i < got; i++ {
+		b := buf[i]
+		out[i] = CPUTimes{Idle: time.Duration(b.IdleTime * 100), Kernel: time.Duration(b.KernelTime * 100), User: time.Duration(b.UserTime * 100)}
+	}
+	return out, nil
+}
+
+// MemDetail reports the file cache, pool usage, commit peak and handle count
+// from GetPerformanceInfo plus the page-file size from GlobalMemoryStatusEx.
+func (SystemPlatform) MemDetail() (model.MemDetail, error) {
+	var pi performanceInfo
+	pi.CB = uint32(unsafe.Sizeof(pi))
+	if r, _, err := procGetPerformanceInfo.Call(uintptr(unsafe.Pointer(&pi)), uintptr(pi.CB)); r == 0 {
+		return model.MemDetail{}, fmt.Errorf("GetPerformanceInfo: %w", err)
+	}
+	pg := uint64(pi.PageSize)
+	d := model.MemDetail{
+		Cached: uint64(pi.SystemCache) * pg, KernelPaged: uint64(pi.KernelPaged) * pg,
+		KernelNonpaged: uint64(pi.KernelNonpaged) * pg, CommitPeak: uint64(pi.CommitPeak) * pg,
+		Handles: pi.HandleCount,
+	}
+	var ms memoryStatusEx
+	ms.Length = uint32(unsafe.Sizeof(ms))
+	if r, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&ms))); r != 0 && ms.TotalPageFile > ms.TotalPhys {
+		d.PageFileTotal = ms.TotalPageFile - ms.TotalPhys
+	}
+	return d, nil
+}

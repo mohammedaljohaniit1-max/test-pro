@@ -1,7 +1,7 @@
 package hub
 
 // SysPulse 2.0 hub extensions: the network anomaly radar, the Alerts &
-// Incidents store, resource alerts and the one-click event-log audits.
+// Incidents store and the one-click event-log audits.
 
 import (
 	"context"
@@ -33,12 +33,9 @@ type v2 struct {
 	alerts   *alerts.Store
 	auditSrc audit.Source
 
-	netPolls  int
-	evPrimed  bool
-	lastARP   time.Time
-	resMu     sync.Mutex
-	resHigh   map[string]int  // consecutive samples over the threshold
-	resActive map[string]bool // currently alerted
+	netPolls int
+	evPrimed bool
+	lastARP  time.Time
 
 	auditMu      sync.Mutex
 	audits       map[string]model.AuditReport
@@ -55,8 +52,6 @@ func (h *Hub) initV2() {
 	h.tableOpt = radar.NewTableOptions(h.cfg.ClientProcs...)
 	h.devices = newDevices()
 	h.alerts = alerts.New(h.cfg.AlertsMax, 10*time.Minute)
-	h.resHigh = map[string]int{}
-	h.resActive = map[string]bool{}
 	h.audits = map[string]model.AuditReport{}
 	h.auditRunning = map[string]bool{}
 	h.alerts.OnChange(func(a model.Alert, isNew bool) {
@@ -349,62 +344,6 @@ func levelAr(l string) string {
 		return "تحذير"
 	}
 	return "معلومات"
-}
-
-// resourceAlerts applies hysteresis: an alert is raised after `need`
-// consecutive samples above the limit and re-armed once the value drops
-// 5 points below it.
-func (h *Hub) resourceAlerts(m model.SystemMetrics) {
-	type chk struct {
-		key       string
-		val, lim  float64
-		need      int
-		sev       string
-		titleEn   string
-		titleAr   string
-		detailEn  string
-		detailAr  string
-		fieldName string
-	}
-	checks := []chk{
-		{"cpu", m.CPUPercent, 90, 30, model.SevWarning, "Sustained high CPU usage", "استخدام مرتفع ومستمر للمعالج",
-			fmt.Sprintf("CPU has been above 90%% for 30 samples (now %.1f%%). Check the Processes tab for the top consumer.", m.CPUPercent),
-			fmt.Sprintf("تجاوز استخدام المعالج 90%% لمدة 30 عينة (حاليًا %.1f%%). راجع تبويب العمليات لمعرفة الأكثر استهلاكًا.", m.CPUPercent), "cpu"},
-		{"mem", m.MemPercent, 92, 15, model.SevWarning, "Memory pressure", "ضغط على الذاكرة",
-			fmt.Sprintf("Physical memory usage is %.1f%%. Applications may slow down as Windows pages to disk.", m.MemPercent),
-			fmt.Sprintf("استخدام الذاكرة الفعلية %.1f%%. قد تتباطأ التطبيقات لأن Windows يبدأ بالترحيل إلى القرص.", m.MemPercent), "memory"},
-	}
-	for _, d := range m.Disks {
-		sev := model.SevWarning
-		if d.Percent >= 97 {
-			sev = model.SevCritical
-		}
-		checks = append(checks, chk{"disk:" + d.Mount, d.Percent, 92, 1, sev, "Low disk space on " + d.Mount, "مساحة منخفضة على القرص " + d.Mount,
-			fmt.Sprintf("%s is %.1f%% full. Free space below 8%% can break Windows Update and cause crashes. Run cleanmgr or Storage Sense.", d.Mount, d.Percent),
-			fmt.Sprintf("القرص %s ممتلئ بنسبة %.1f%%. انخفاض المساحة الحرة عن 8%% قد يعطّل تحديثات Windows ويسبب أعطالًا. شغّل cleanmgr أو «استشعار التخزين».", d.Mount, d.Percent), "disk"})
-	}
-	h.resMu.Lock()
-	var raise []chk
-	for _, c := range checks {
-		if c.val >= c.lim {
-			h.resHigh[c.key]++
-			if h.resHigh[c.key] >= c.need && !h.resActive[c.key] {
-				h.resActive[c.key] = true
-				raise = append(raise, c)
-			}
-		} else {
-			h.resHigh[c.key] = 0
-			if c.val < c.lim-5 {
-				h.resActive[c.key] = false
-			}
-		}
-	}
-	h.resMu.Unlock()
-	for _, c := range raise {
-		h.alerts.Raise("res:"+c.key, model.Alert{Severity: c.sev, Category: model.AlertResource, Source: "metrics",
-			Title: model.T(c.titleEn, c.titleAr), Detail: model.T(c.detailEn, c.detailAr),
-			Fields: map[string]string{c.fieldName: strconv.FormatFloat(c.val, 'f', 1, 64), "threshold": strconv.FormatFloat(c.lim, 'f', 0, 64)}})
-	}
 }
 
 // ---------------------------------------------------------------------------

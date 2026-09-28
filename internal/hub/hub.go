@@ -48,6 +48,10 @@ type Config struct {
 	ClientProcs []string // extra outbound-only process names ignored by the table sensor
 	NoResolve   bool     // disable NetBIOS / mDNS / DNS name resolution of LAN devices
 	Resolver    NameResolver
+
+	// SysPulse 4.0.
+	ServicesEvery time.Duration // service enumeration cadence (default 5 s)
+	RulesFile     string        // JSON persistence of alert rules ("" = in-memory)
 }
 
 func (c *Config) defaults() {
@@ -65,6 +69,9 @@ func (c *Config) defaults() {
 	}
 	if c.MaxEvents <= 0 {
 		c.MaxEvents = 2000
+	}
+	if c.ServicesEvery <= 0 {
+		c.ServicesEvery = 5 * time.Second
 	}
 	if len(c.Channels) == 0 {
 		c.Channels = []string{"System", "Application"}
@@ -91,6 +98,7 @@ type Hub struct {
 	dropped atomic.Uint64
 	now     func() time.Time
 	v2
+	v4
 }
 
 // Subscriber is one connected dashboard.
@@ -106,6 +114,7 @@ func New(cfg Config, log *slog.Logger, sys *sysmon.Monitor, procs *procmon.Monit
 	h := &Hub{cfg: cfg, log: log, sys: sys, procs: procs, net: net, events: events,
 		subs: map[*Subscriber]struct{}{}, lastRec: map[string]uint64{}, now: time.Now}
 	h.initV2()
+	h.initV4()
 	return h
 }
 
@@ -193,6 +202,7 @@ func (h *Hub) Run(ctx context.Context) {
 	if h.events != nil {
 		loop(h.cfg.EventsEvery, h.collectEvents)
 	}
+	h.runV4(loop)
 	wg.Wait()
 }
 
@@ -210,16 +220,15 @@ func (h *Hub) collectMetrics() {
 		h.log.Warn("system sample failed", "err", err)
 		return
 	}
-	h.resourceAlerts(m)
+	h.evalHostRules(m, ps)
 	if h.Subscribers() == 0 {
 		return
 	}
 	h.Broadcast("metrics", m)
-	top := ps
-	if len(top) > 300 {
-		top = top[:300]
-	}
-	h.Broadcast("processes", top)
+	// The full list is sent (not just the top 300) so the hierarchy view can
+	// link every child to its parent.
+	h.Broadcast("processes", ps)
+	h.broadcastV4()
 }
 
 func (h *Hub) collectNet() {
@@ -234,11 +243,16 @@ func (h *Hub) collectNet() {
 	}
 	var stats model.NetStats
 	var listening map[string][]model.Listener
+	var conns []model.Connection
 	if err == nil {
 		stats = h.net.Stats()
 		listening = h.net.Listening()
+		conns = h.net.Snapshot()
 	}
 	h.netMu.Unlock()
+	if err == nil {
+		h.evalNetRules(stats, conns)
+	}
 	if err != nil {
 		h.log.Warn("connection poll failed", "err", err)
 		h.radarTickFn()
@@ -365,6 +379,13 @@ type Snapshot struct {
 	Alerts      []model.Alert         `json:"alerts"`
 	AlertCounts any                   `json:"alertcounts"`
 	Audit       AuditState            `json:"audit"`
+
+	// SysPulse 4.0.
+	Interfaces InterfacesState `json:"interfaces"`
+	Services   ServicesState   `json:"services"`
+	Rules      RulesState      `json:"rules"`
+	Health     model.Health    `json:"health"`
+	ProcMeta   ProcMeta        `json:"procmeta"`
 }
 
 // Snapshot builds the full current state.
@@ -383,6 +404,7 @@ func (h *Hub) Snapshot() Snapshot {
 		Connections: conns, NetStats: ns, Events: evs, EventStats: h.EventSummary(),
 		EventError: evErr, NetError: netErr,
 		Radar: h.radar.Snapshot(100), Devices: h.Devices(), SelfTest: h.cfg.SelfTest, Alerts: h.alerts.List(alertsFilter(500)), AlertCounts: h.alerts.Counts(),
-		Audit: h.AuditState(),
+		Audit:      h.AuditState(),
+		Interfaces: h.Interfaces(), Services: h.Services(), Rules: h.RulesState(), Health: h.Health(), ProcMeta: h.ProcMeta(),
 	}
 }

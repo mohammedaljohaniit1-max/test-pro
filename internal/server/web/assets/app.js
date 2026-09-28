@@ -1,4 +1,4 @@
-/* SysPulse 3.0 dashboard — vanilla JS, no external dependencies (CSP: script-src 'self'). */
+/* SysPulse 4.0 dashboard core — vanilla JS, no external dependencies (CSP: script-src 'self'). */
 (() => {
   "use strict";
   const TOKEN = document.querySelector('meta[name="syspulse-token"]').content;
@@ -34,7 +34,7 @@
   // Wrap LTR tokens (IPs, MACs, ports, paths) so they render correctly inside RTL text.
   const ltr = (s) => `<bdi dir="ltr">${esc(s)}</bdi>`;
   const CAT_KEYS = ["service-crash", "app-fault", "unexpected-shutdown", "driver", "disk", "windows-update", "power"];
-  const ACATS = ["network-sweep", "authentication", "reliability", "resource", "system"];
+  const ACATS = ["network-sweep", "network", "authentication", "reliability", "resource", "system"];
   const catName = (k) => t("cat." + k);
   const sevName = (s) => t("sev." + s);
   // Event levels arrive as "error", "Error" or "ERROR" depending on the
@@ -70,18 +70,30 @@
   };
   const connKey = (c) => [c.proto, c.localAddr, c.localPort, c.remoteAddr || "", c.remotePort || 0, c.pid].join("|");
 
-  // ---------- tabs ----------
+  // ---------- views (sidebar router) ----------
+  // Every <section class="panel" data-view="…"> is a view; the URL hash
+  // (#/cpu, #/ptree…) makes the current view bookmarkable and reload-safe.
+  const HOOKS = { render: [], message: [], lang: [], view: [] };
+  const VIEWS = [...document.querySelectorAll(".panel[data-view]")].map((p) => p.dataset.view);
   let active = "overview";
   function showTab(name) {
+    if (!VIEWS.includes(name)) name = "overview";
     active = name;
-    document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
-    document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
-    if (name === "software" && !S.software) loadSoftware();
+    document.querySelectorAll(".nav-item[data-view]").forEach((x) => {
+      const on = x.dataset.view === name;
+      x.classList.toggle("active", on);
+      if (on) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "view-" + name));
+    if ((name === "software" || name === "updates") && !S.software) loadSoftware();
     if (name === "guide") renderGuide();
+    if (location.hash !== "#/" + name) history.replaceState(null, "", "#/" + name);
+    HOOKS.view.forEach((fn) => fn(name));
     renderAll();
   }
-  document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-  document.querySelectorAll("[data-goto]").forEach((c) => c.addEventListener("click", () => showTab(c.dataset.goto)));
+  window.addEventListener("hashchange", () => showTab(location.hash.replace(/^#\/?/, "")));
+  document.querySelectorAll(".nav-item[data-view]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.view)));
+  document.addEventListener("click", (ev) => { const g = ev.target.closest("[data-goto]"); if (g) showTab(g.dataset.goto); });
 
   // ---------- sortable tables ----------
   function sortable(tableId, defKey, defDir, onChange) {
@@ -111,6 +123,10 @@
     const w = c.clientWidth, h = c.getAttribute("height") | 0;
     if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; c.style.height = h + "px"; }
     const g = c.getContext("2d");
+    // Canvas text inherits the document direction; in RTL, labels drawn at a
+    // small x would extend leftwards off the canvas. Axes are always LTR.
+    g.direction = "ltr";
+    g.textAlign = "left";
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     return { g, w, h };
@@ -217,7 +233,7 @@
     $("c-mem").textContent = fmtPct(m.memPercent);
     $("c-mem2").textContent = `${fmtBytes(m.memUsed)} / ${fmtBytes(m.memTotal)}`;
     $("c-commit").textContent = m.commitTotal ? fmtPct((m.commitUsed / m.commitTotal) * 100) : "–";
-    $("c-commit2").textContent = `${fmtBytes(m.commitUsed)} / ${fmtBytes(m.commitTotal)}`;
+    $("c-commit2").textContent = m.commitTotal ? `${fmtBytes(m.commitUsed)} / ${fmtBytes(m.commitTotal)}` : fmtBytes(m.commitUsed);
     $("c-procs").textContent = m.processes;
     $("c-threads").textContent = t("ov.threads", { n: m.threads.toLocaleString(L()) });
     $("c-up").textContent = fmtUptime(m.uptime);
@@ -246,7 +262,7 @@
   const isLoop = (a) => !a || a === "127.0.0.1" || a === "::1";
   function renderNetwork() {
     $("b-net").textContent = S.conns.size;
-    if (active !== "network") return;
+    if (active !== "sockets") { renderDevices(); return; }
     if (S.netstats) {
       const states = Object.entries(S.netstats.byState).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
       bars($("net-states"), states);
@@ -275,7 +291,8 @@
   const devClass = (d) => d.class || "unknown";
   const ipNum = (ip) => { const p = String(ip).split("."); return p.length === 4 ? p.reduce((a, x) => a * 256 + (+x || 0), 0) : 0; };
   function renderDevices() {
-    if (active !== "network") return;
+    $("b-dev").textContent = (S.devices || []).length;
+    if (active !== "devices") return;
     const sel = $("dev-class");
     if (sel.options.length === 1) DEV_CLASSES.forEach((k) => sel.add(new Option(t("dclass." + k), k)));
     const q = $("dev-q").value.trim().toLowerCase(), cls = sel.value;
@@ -343,7 +360,7 @@
   }
   function renderProcesses() {
     $("b-proc").textContent = S.procs.length;
-    if (active !== "processes") return;
+    if (active !== "procs") return;
     const cpuMin = +$("proc-cpu-min").value, memMin = +$("proc-mem-min").value;
     document.querySelectorAll("#proc-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.pf === procFilter));
     const rows = procRows();
@@ -810,7 +827,7 @@
     $("a-foot").textContent = t("alerts.foot", { n: rows.length, total: S.alerts.length });
   }
   $("a-sev-chips").addEventListener("click", (ev) => { const c = ev.target.closest(".chip"); if (c) { aSev = c.dataset.sevf; renderAlerts(); } });
-  document.querySelectorAll("#tab-alerts .sev-card[data-sev]").forEach((c) => c.addEventListener("click", () => { aSev = aSev === c.dataset.sev ? "" : c.dataset.sev; renderAlerts(); }));
+  document.querySelectorAll("#view-alerts .sev-card[data-sev]").forEach((c) => c.addEventListener("click", () => { aSev = aSev === c.dataset.sev ? "" : c.dataset.sev; renderAlerts(); }));
   $("a-table").addEventListener("click", async (ev) => {
     const ack = ev.target.closest("[data-ack]");
     if (ack) {
@@ -874,7 +891,7 @@
     const sw = S.software;
     const n = sw?.upgrades?.length;
     $("b-sw").textContent = n == null ? "–" : n;
-    if (active !== "software" || !sw) return;
+    if ((active !== "software" && active !== "updates") || !sw) return;
     const checking = sw.checking;
     const checked = sw.upgradesAt && !sw.upgradesAt.startsWith("0001");
     $("sw-refresh").disabled = checking;
@@ -979,6 +996,7 @@
       raf = 0;
       renderOverview(); renderNetwork(); renderRadar(); renderProcesses(); renderEvents();
       renderDiagnostics(); renderAlerts(); renderSoftware();
+      HOOKS.render.forEach((fn) => { try { fn(active); } catch (e) { console.error(e); } });
     });
   }
   // Every filter control re-renders on both "input" (typing, instant) and
@@ -1005,6 +1023,7 @@
     renderMode();
     renderBanner();
     if (active === "guide") renderGuide();
+    HOOKS.lang.forEach((fn) => fn(l));
     renderAll();
   }
   document.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang)));
@@ -1074,6 +1093,7 @@
         case "audit": S.audit.reports = { ...(S.audit.reports || {}), [d.kind]: d }; break;
         case "auditstate": S.audit = d; break;
       }
+      HOOKS.message.forEach((fn) => { try { fn(msg.type, d); } catch (e) { console.error(e); } });
       renderAll();
     };
   }
@@ -1087,8 +1107,22 @@
     b.title = t(MODE === "synthetic" ? "mode.syntheticTip" : "mode.liveTip");
   }
 
+  // ---------- extension API (consumed by v4.js) ----------
+  window.SysPulse = {
+    S, $, esc, ltr, t, tx, L, I18N_LANG: () => window.I18N.lang, fmtBytes, fmtPct, fmtTime, fmtDateTime, ago, api, modal, confirmBox, toast, copyText,
+    applyWidths, setupCanvas, grid, sortable, cmp, showTab, renderAll, inspectProcess, setLang, loadSoftware,
+    get active() { return active; },
+    onRender: (fn) => HOOKS.render.push(fn), onMessage: (fn) => HOOKS.message.push(fn),
+    onLang: (fn) => HOOKS.lang.push(fn), onView: (fn) => HOOKS.view.push(fn),
+  };
+
   // ---------- boot ----------
-  renderSound();
-  setLang(window.I18N.lang);
-  connect();
+  // Deferred until every script (including v4.js) has registered its hooks,
+  // so the first WebSocket snapshot is seen by all modules.
+  document.addEventListener("DOMContentLoaded", () => {
+    renderSound();
+    setLang(window.I18N.lang);
+    showTab(location.hash.replace(/^#\/?/, "") || "overview");
+    connect();
+  });
 })();

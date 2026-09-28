@@ -769,3 +769,16 @@ func pad(n int) string {
 	}
 	return s
 }
+
+// ActiveCount returns the number of currently active sweep incidents.
+func (d *Detector) ActiveCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	n := 0
+	for _, inc := range d.incidents {
+		if inc.Active {
+			n++
+		}
+	}
+	return n
+}

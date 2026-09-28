@@ -106,9 +106,24 @@ func meminfo() map[string]uint64 {
 }
 
 // Memory returns total, available, committed and commit limit.
+//
+// CommitLimit is only enforced in strict overcommit mode
+// (vm.overcommit_memory = 2). In the default heuristic mode Committed_AS
+// routinely exceeds it, so reporting it as a limit would show a meaningless
+// "commit > 100 %" and trigger false alerts; the limit is then reported as
+// 0 (unknown), unlike Windows where the commit limit is always hard.
 func (s *System) Memory() (uint64, uint64, uint64, uint64, error) {
 	m := meminfo()
-	return m["MemTotal"], m["MemAvailable"], m["Committed_AS"], m["CommitLimit"] + 0, nil
+	limit := m["CommitLimit"]
+	if !strictOvercommit() {
+		limit = 0
+	}
+	return m["MemTotal"], m["MemAvailable"], m["Committed_AS"], limit, nil
+}
+
+func strictOvercommit() bool {
+	b, err := os.ReadFile("/proc/sys/vm/overcommit_memory")
+	return err == nil && strings.TrimSpace(string(b)) == "2"
 }
 
 // Disks lists real block-device filesystems from /proc/self/mounts.
@@ -174,4 +189,38 @@ func bootTime() time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// CoreTimes reads the per-CPU "cpuN" lines of /proc/stat.
+func (s *System) CoreTimes() ([]sysmon.CPUTimes, error) {
+	b, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return nil, err
+	}
+	var out []sysmon.CPUTimes
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(line, "cpu") || strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		f := strings.Fields(line)
+		v := func(i int) time.Duration {
+			if i >= len(f) {
+				return 0
+			}
+			n, _ := strconv.ParseUint(f[i], 10, 64)
+			return time.Duration(n) * time.Second / clkTck
+		}
+		user := v(1) + v(2)
+		sys := v(3) + v(6) + v(7) + v(8)
+		idle := v(4) + v(5)
+		out = append(out, sysmon.CPUTimes{Idle: idle, Kernel: sys + idle, User: user})
+	}
+	return out, nil
+}
+
+// MemDetail reports page cache, slab and swap from /proc/meminfo.
+func (s *System) MemDetail() (model.MemDetail, error) {
+	m := meminfo()
+	return model.MemDetail{Cached: m["Cached"] + m["Buffers"], KernelPaged: m["SReclaimable"], KernelNonpaged: m["SUnreclaim"],
+		PageFileTotal: m["SwapTotal"]}, nil
 }

@@ -35,7 +35,7 @@ import (
 var webFS embed.FS
 
 // Version is set at build time.
-var Version = "3.0.0"
+var Version = "4.0.0"
 
 // SoftwareBackend abstracts registry/winget access for tests.
 type SoftwareBackend interface {
@@ -107,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/software/upgrade", s.guard(s.upgrade))
 	s.routesV2(mux)
 	s.routesV3(mux)
+	s.routesV4(mux)
 	return securityHeaders(mux)
 }
 

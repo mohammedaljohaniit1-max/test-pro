@@ -1,4 +1,4 @@
-/* SysPulse 3.0 — integrated User Guide & System Manual (English / Arabic).
+/* SysPulse 4.0 — integrated User Guide & System Manual (English / Arabic).
  * Content is structured data rendered into tables by renderGuide(); all text
  * is escaped, so it is safe under the strict CSP. */
 (() => {
@@ -13,10 +13,26 @@
 
   const G = {
     en: {
-      title: "SysPulse 3.0 — User Guide & System Manual",
+      title: "SysPulse 4.0 — User Guide & System Manual",
       intro: "SysPulse is a read-only Windows observability and reliability cockpit. It samples the machine through native Win32 APIs, streams live telemetry to this dashboard over a local WebSocket, detects network connection sweeps, audits the event logs on demand and keeps a searchable, exportable incident stream. Nothing is changed on the machine except the software upgrades you start yourself.",
       toc: "Contents",
       sections: [
+        {
+          id: "v4", h: "What's new in 4.0",
+          table: { cols: ["Capability", "What it does", "Windows data source"], rows: [
+            ["Enterprise sidebar", "Seven grouped domains replace the top tabs. Collapse with **[** or the footer button; the choice is remembered. Every entry has a live badge and the URL hash (`#/cpu`, `#/ptree`…) is bookmarkable.", "—"],
+            ["Command palette", "**Ctrl + K** (⌘ K on macOS) searches views, commands, processes, services, interfaces, LAN devices and remote IPs. **g** then a letter jumps to a view (g c = CPU, g t = tree, g b = bandwidth, g r = rules); **/** focuses the page filter.", "—"],
+            ["Live health score", "0–100 composite with every deduction listed: CPU > 70 %, memory > 75 %, commit > 80 %, fullest volume > 85 %, unacknowledged critical / warning alerts, active sweeps and failed automatic services.", "All collectors"],
+            ["CPU-driven EKG", "The PQRST waveform in the sidebar and on the Health view beats at 60 bpm idle up to 180 bpm at 100 % CPU; amplitude and baseline noise grow with load, colour moves cyan → amber → rose, and the trace flat-lines red when telemetry stops for 5 s.", "GetSystemTimes"],
+            ["CPU & memory profiler", "Per-logical-processor heatmap (60 s), busiest core and imbalance, kernel vs user time, and memory composition: in use, available, system file cache, commit charge / limit / peak, paged and non-paged pool, page file and system handles.", "NtQuerySystemInformation(SystemProcessorPerformanceInformation), GetPerformanceInfo, GlobalMemoryStatusEx"],
+            ["Storage matrix", "Ring gauge per volume with Healthy / Watch (≥ 85 %) / Low space (≥ 92 %) / Critical (≥ 97 %) states and a sortable capacity table.", "GetDiskFreeSpaceExW"],
+            ["Windows services", "Every Win32 service: state, startup type (including delayed start), host PID, account, binary, description and Win32 exit code. *Auto-start failed* counts automatic services stopped with a non-zero exit code other than 1077 (never started since boot, which is normal for trigger-start services).", "EnumServicesStatusExW, QueryServiceConfigW, QueryServiceConfig2W"],
+            ["Interface bandwidth", "Bytes/s and packets/s in and out for every physical and virtual adapter (Hyper-V / WSL vEthernet, VPN, TAP) with 60 s sparklines, link speed, utilisation, MAC and cumulative errors / discards. NDIS filter shadows and WAN Miniports are excluded so bytes are never double-counted.", "GetIfTable2 (MIB_IF_ROW2)"],
+            ["Process tree", "Parent → child hierarchy with guide lines, expand / collapse, subtree CPU and descendant counts, working set vs private bytes bars, per-process socket count (click to open Active Sockets) and the services hosted by each svchost.exe. A parent that started after its child is treated as a recycled PID.", "CreateToolhelp32Snapshot, GetExtendedTcpTable, Service Control Manager"],
+            ["Top consumers", "Sustained 60 s CPU average, largest working sets and fastest private-bytes growth per minute (leak candidates).", "GetProcessTimes, GetProcessMemoryInfo"],
+            ["Alert rules engine", "Replaces the fixed 2.x/3.x thresholds. Each rule = metric + operator + threshold + sustain duration + optional scope glob + severity + hysteresis. 20 metrics across CPU, memory, storage, processes, network (including socket burst and NIC saturation), services and health. Rules are saved to `%LOCALAPPDATA%\\SysPulse\\rules.json`.", "All collectors"],
+          ] },
+        },
         {
           id: "v3", h: "What's new in 3.0",
           table: { cols: ["Feature", "What it does"], rows: [
@@ -147,6 +163,8 @@
             ["-no-raw-capture", "false", "Disable the raw SYN sensor"],
             ["-interval", "1s", "Sampling period"],
             ["-events-window / -events-max", "168h / 2000", "Event log look-back and retention"],
+            ["-rules-file", "%LOCALAPPDATA%\\SysPulse\\rules.json", "Where alert rules are persisted (empty = memory only)"],
+            ["-services-interval", "5s", "Windows service enumeration interval"],
             ["-no-browser, -v, -version", "", "UI launch, verbose logging, version"],
           ] },
         },
@@ -165,10 +183,26 @@
     },
 
     ar: {
-      title: "SysPulse 3.0 — دليل الاستخدام ودليل النظام",
+      title: "SysPulse 4.0 — دليل الاستخدام ودليل النظام",
       intro: "SysPulse لوحة قراءة فقط لمراقبة Windows وموثوقيته. يقرأ حالة الجهاز عبر واجهات Win32 الأصلية، ويبث القياسات الحية إلى هذه اللوحة عبر WebSocket محلي، ويكتشف عمليات مسح المنافذ على الشبكة، ويدقق سجلات الأحداث عند الطلب، ويحفظ سجل حوادث قابلًا للبحث والتصدير. لا يغيّر شيئًا على الجهاز باستثناء ترقيات البرامج التي تبدؤها بنفسك.",
       toc: "المحتويات",
       sections: [
+        {
+          id: "v4", h: "الجديد في الإصدار 4.0",
+          table: { cols: ["الميزة", "ما تقوم به", "مصدر البيانات في Windows"], rows: [
+            ["شريط جانبي مؤسسي", "سبع مجموعات بدل التبويبات العلوية. اطوِه بالمفتاح **[** أو بزر التذييل ويُحفَظ اختيارك. لكل عنصر شارة حية، ويمكن حفظ العنوان (`#/cpu` و`#/ptree`…) كإشارة مرجعية.", "—"],
+            ["لوحة الأوامر", "**Ctrl + K** (أو ⌘ K على macOS) تبحث في العروض والأوامر والعمليات والخدمات والواجهات وأجهزة الشبكة والعناوين البعيدة. **g** ثم حرف للانتقال إلى عرض (g c للمعالج، g t للشجرة، g b لعرض النطاق، g r للقواعد)، و**/** لتركيز مرشح الصفحة.", "—"],
+            ["درجة الصحة الحية", "مؤشر مركّب من 0 إلى 100 مع كل خصم: المعالج > 70%، الذاكرة > 75%، الالتزام > 80%، أكثر وحدة امتلاءً > 85%، التنبيهات الحرجة والتحذيرات غير المُقرّ بها، عمليات المسح النشطة والخدمات التلقائية الفاشلة.", "كل المجمّعات"],
+            ["تخطيط قلب يقوده المعالج", "موجة PQRST في الشريط الجانبي وعرض الصحة تنبض بـ 60 نبضة/دقيقة عند الخمول حتى 180 عند 100% من المعالج؛ تزداد السعة والضوضاء مع الحمل ويتدرج اللون من السماوي إلى الكهرماني إلى الوردي، ويصبح الخط مستويًا أحمر إذا توقفت القياسات 5 ثوانٍ.", "GetSystemTimes"],
+            ["محلل المعالج والذاكرة", "خريطة حرارية لكل معالج منطقي (60 ثانية)، أكثر نواة انشغالًا وعدم التوازن، وقت النواة مقابل المستخدم، وتركيب الذاكرة: المستخدمة والمتاحة وذاكرة الملفات المؤقتة والالتزام وحدّه وذروته والمجمّع المرحّل وغير المرحّل وملف الترحيل ومقابض النظام.", "NtQuerySystemInformation(SystemProcessorPerformanceInformation)، GetPerformanceInfo، GlobalMemoryStatusEx"],
+            ["مصفوفة التخزين", "مقياس دائري لكل وحدة بحالات سليم / للمراقبة (≥ 85%) / مساحة منخفضة (≥ 92%) / حرج (≥ 97%) وجدول سعات قابل للفرز.", "GetDiskFreeSpaceExW"],
+            ["خدمات Windows", "كل خدمة Win32: الحالة ونوع البدء (بما فيه البدء المتأخر) ومعرّف العملية المضيفة والحساب والملف التنفيذي والوصف ورمز خروج Win32. يعدّ *فشل البدء التلقائي* الخدمات التلقائية المتوقفة برمز خروج غير صفري عدا 1077 (لم تبدأ منذ الإقلاع، وهو طبيعي للخدمات التي تبدأ بمشغّل).", "EnumServicesStatusExW، QueryServiceConfigW، QueryServiceConfig2W"],
+            ["عرض نطاق الواجهات", "البايتات والحزم في الثانية واردًا وصادرًا لكل محول فعلي وافتراضي (vEthernet لـ Hyper-V / WSL وVPN وTAP) مع خطوط بيانية لـ 60 ثانية وسرعة الرابط ونسبة الاستخدام وعنوان MAC والأخطاء والمهملات التراكمية. تُستبعد ظلال مرشحات NDIS ومحولات WAN Miniport كي لا تُحتسب البايتات مرتين.", "GetIfTable2 (MIB_IF_ROW2)"],
+            ["شجرة العمليات", "تسلسل الأب ← الابن مع خطوط إرشادية وتوسيع / طيّ ومعالج الفرع وعدد الأبناء وأشرطة مجموعة العمل مقابل البايتات الخاصة وعدد المقابس لكل عملية (انقر لفتح المقابس النشطة) والخدمات التي يستضيفها كل svchost.exe. الأب الذي بدأ بعد ابنه يُعامل كمعرّف أُعيد استخدامه.", "CreateToolhelp32Snapshot، GetExtendedTcpTable، مدير التحكم بالخدمات"],
+            ["الأكثر استهلاكًا", "متوسط المعالج خلال 60 ثانية وأكبر مجموعات العمل وأسرع نمو للبايتات الخاصة في الدقيقة (مرشحو التسرب).", "GetProcessTimes، GetProcessMemoryInfo"],
+            ["محرك قواعد التنبيه", "يحل محل العتبات الثابتة في 2.x/3.x. كل قاعدة = مقياس + معامل + عتبة + مدة استمرار + نمط نطاق اختياري + خطورة + هامش تخلّف. 20 مقياسًا عبر المعالج والذاكرة والتخزين والعمليات والشبكة (بما فيها اندفاع المقابس وتشبّع الواجهة) والخدمات والصحة. تُحفظ القواعد في `%LOCALAPPDATA%\\SysPulse\\rules.json`.", "كل المجمّعات"],
+          ] },
+        },
         {
           id: "v3", h: "الجديد في الإصدار 3.0",
           table: { cols: ["الميزة", "ماذا تفعل"], rows: [
@@ -299,6 +333,8 @@
             ["-no-raw-capture", "false", "تعطيل مستشعر SYN الخام"],
             ["-interval", "1s", "فترة أخذ العينات"],
             ["-events-window / -events-max", "168h / 2000", "مدى قراءة سجل الأحداث والاحتفاظ به"],
+            ["-rules-file", "%LOCALAPPDATA%\\SysPulse\\rules.json", "مكان حفظ قواعد التنبيه (فارغ = في الذاكرة فقط)"],
+            ["-services-interval", "5s", "الفاصل الزمني لحصر خدمات Windows"],
             ["-no-browser، ‎-v، ‎-version", "", "فتح الواجهة، السجل المفصّل، الإصدار"],
           ] },
         },

@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/hub"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/ifstats"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/linuxhost"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netnames"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/procmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/radar"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/server"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/services"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/sysmon"
 )
 
@@ -30,6 +32,8 @@ func liveStack(ctx context.Context, log *slog.Logger, addr string, selfTest, noR
 	h := hub.New(hub.Config{MetricsEvery: time.Second, NetEvery: time.Second, EventsEvery: 15 * time.Second,
 		EventWindow: 7 * 24 * time.Hour, MaxEvents: 2000, Channels: []string{"System", "Application"},
 		SelfTest: selfTest, NoResolve: noResolve, Resolver: netnames.New()}, log, sm, pm, tracker, ev)
+	h.SetInterfaceReader(ifstats.NewSystemReader())
+	h.SetServiceLister(services.NewSystemLister())
 	h.SetRadarPlatform(linuxhost.Neighbors{})
 	h.SetGateways(linuxhost.Gateways())
 	h.Radar().SetSensor(radar.SensorStatus{Name: radar.SensorTable, Active: true, Detail: "new inbound rows of /proc/net/tcp{,6} (accepted connections)"})

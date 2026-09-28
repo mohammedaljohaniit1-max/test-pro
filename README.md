@@ -1,6 +1,6 @@
-# SysPulse 3.0
+# SysPulse 4.0
 
-> **Windows Observability & System Reliability Cockpit** — bilingual (English / العربية with full RTL), with a multi-port connection-sweep radar, one-click event-log diagnostics, an Alerts & Incidents centre and an integrated user guide.
+> **Windows Observability & Reliability Control Plane** — bilingual (English / العربية with full RTL), with a multi-port connection-sweep radar, one-click event-log diagnostics, an Alerts & Incidents centre and an integrated user guide.
 
 A native **Windows system diagnostics and observability suite** in Go. It builds to one self-contained `syspulse.exe` with an embedded dark-theme dashboard at **http://localhost:9099**, which receives live telemetry over WebSocket.
 
@@ -17,6 +17,27 @@ It reads the machine and does not change it. The one exception is the software u
 | **Alerts & Incidents** *(2.0)* | Critical / Warning / Informational badges, de-duplication with counts, quick filters, search, acknowledgement, one-click JSON/CSV export (UTF-8 BOM, formula-injection safe). Fed by the radar, the event log, the audits and resource thresholds. | all modules |
 | **User Guide / دليل الاستخدام** *(2.0)* | Metric and feature comparison tables, sensor explanations, flags, troubleshooting and a step-by-step **Verification Guide** for safely testing sweep detection on your own LAN. | embedded |
 | **Software** | Installed programs from the registry Uninstall keys (HKLM 64-bit, HKLM 32-bit, HKCU), merged with `winget upgrade` results. Upgradable packages get a one-click **Upgrade** button. | `x/sys/windows/registry`, `winget.exe` |
+
+## What's new in 4.0
+
+4.0 changes the dashboard from a set of top tabs into a grouped, keyboard-driven control plane. It adds the host-level telemetry that 3.x lacked: per-core CPU, memory composition, per-NIC throughput, Windows services and the process hierarchy. Alerting is now a rule engine you configure, replacing the fixed thresholds.
+
+| Area | Change | Native source |
+|---|---|---|
+| **Enterprise sidebar** | Seven collapsible groups: Telemetry Hub · Host Infrastructure · Network Observability · Process Explorer · Diagnostics & Forensics · Software & Upgrades · Documentation. It has SVG icons and live badge counters, a 64 px icon rail when collapsed (`[` key, remembered), a mobile drawer, full RTL mirroring and bookmarkable `#/view` URLs. | — |
+| **Header & command palette** | Breadcrumb, live CPU / MEM / NET / HEALTH indicators, the *LIVE HOST DATA* badge, the EN / AR switch and a **Ctrl + K** palette. The palette fuzzy-searches views, commands, processes, services, interfaces, LAN devices and remote IPs. `g` + letter jumps between views; `/` focuses the page filter. | — |
+| **Live health score** | A 0–100 gauge whose deductions are all itemised: CPU, memory, commit, fullest volume, unacknowledged alerts, active sweeps and failed auto-start services. It has a 5-minute trend and lists the rules currently firing. | all collectors |
+| **CPU-driven EKG** | The canvas PQRST waveform (sidebar plus a large monitor) runs from 60 bpm idle to 180 bpm at 100 % CPU. Amplitude and noise scale with load; the colour goes cyan → amber → rose. The trace flat-lines red when telemetry stops for 5 s. | `GetSystemTimes` |
+| **CPU & memory profiler** | Per-logical-processor heatmap (60 s) and core bars, busiest core, imbalance, and kernel vs user time. Memory composition covers in use, available, file cache, commit charge / limit / peak, paged / non-paged pool, page file and system handles. | `NtQuerySystemInformation(SystemProcessorPerformanceInformation)`, `GetPerformanceInfo`, `GlobalMemoryStatusEx` |
+| **Storage matrix** | A ring gauge and state per volume (Healthy / Watch ≥ 85 % / Low space ≥ 92 % / Critical ≥ 97 %), plus a sortable capacity table. | `GetDiskFreeSpaceExW` |
+| **Windows services monitor** | Every Win32 service with state, startup type (including *Automatic (delayed start)*), host PID, account, binary, description and Win32 exit code. There are quick filters, including *Auto-start failed* (exit code ≠ 0 and ≠ 1077 `ERROR_SERVICE_NEVER_STARTED`). Configuration is cached and re-read every 20th refresh; refresh runs every 5 s. | `EnumServicesStatusExW(SC_ENUM_PROCESS_INFO)`, `QueryServiceConfigW`, `QueryServiceConfig2W` |
+| **Interface bandwidth meters** | Bytes/s and packets/s in and out for every physical and virtual adapter (Hyper-V / WSL vEthernet, VPN, TAP) with 60 s sparklines, link speed, utilisation, MAC and cumulative errors / discards. NDIS filter-driver shadows and WAN Miniports are dropped so traffic is never double-counted. Counter resets never produce spikes. | `GetIfTable2` / `MIB_IF_ROW2` (layout size asserted at 1352 B) |
+| **Process tree** | Parent → child hierarchy with guide lines and expand / collapse (all or per node). It shows subtree CPU and descendant count, working set vs private bytes bars, per-process socket count (links to Active Sockets) and the services hosted by each `svchost.exe`. A parent that started after its child is treated as a recycled PID. | `CreateToolhelp32Snapshot`, `GetExtendedTcpTable`, SCM |
+| **Top consumers** | 60 s sustained CPU average, largest working sets and fastest private-bytes growth per minute (leak candidates). | `GetProcessTimes`, `GetProcessMemoryInfo` |
+| **Alert rules engine** | Replaces the hard-coded 2.x/3.x resource alerts. A rule is metric + operator + threshold + sustain duration + scope glob + severity + hysteresis. There are 20 metrics: CPU total / busiest core / kernel, memory, commit, handles, volume %, per-process CPU / working set / threads, **socket burst** (new sockets/s), open sockets, established TCP, per-NIC receive / send / utilisation / errors, failed auto-start services, a specific service stopped, and the health score. Rules are evaluated per instance, re-arm only past the hysteresis margin, resolve when the instance disappears, and are persisted atomically to `%LOCALAPPDATA%\SysPulse\rules.json`. Nine defaults ship, including *CPU > 85 % for 30 s*. | all collectors |
+| **Design system** | Glassmorphic cards, neon wordmark, view transitions, responsive grids, and instant client-side filtering in every view. Everything stays under the strict CSP: no inline styles or scripts, and geometry is set through the CSSOM. | — |
+
+New flags: `-rules-file`, `-services-interval`. New endpoints: `GET /api/interfaces`, `GET /api/services`, `GET /api/processes/tree`, `GET /api/health/score`, `GET /api/rules`, `POST /api/rules`, `PUT /api/rules/{id}`, `DELETE /api/rules/{id}`, `POST /api/rules/reset`. New WebSocket messages: `ifstats`, `services`, `health`, `rules`, `rulestate`, `procmeta`. The `processes` message now carries every process (not only the top 300) so the hierarchy is complete.
 
 ## What's new in 3.0
 
@@ -56,11 +77,14 @@ New flags: `-enable-selftest`, `-radar-client-procs`, `-no-resolve`. New endpoin
     ├── oui/                      # embedded IEEE OUI registry (MA-L/MA-M/MA-S) + generator (3.0)
     ├── netnames/                 # NetBIOS NBSTAT, mDNS PTR and reverse-DNS host-name resolver (3.0)
     ├── linuxhost/                # real Linux collectors for the preview binary (3.0)
+    ├── ifstats/                  # per-interface throughput: GetIfTable2 (Windows), /proc/net/dev (preview) (4.0)
+    ├── services/                 # Windows SCM services monitor (+ systemd in the preview) (4.0)
+    ├── rules/                    # configurable threshold alert rules engine + metric catalog (4.0)
     ├── alerts/                   # alert store, filters, JSON/CSV export
     ├── audit/                    # auth + reliability analysis with bilingual diagnosis/fix
     ├── hub/                      # collector scheduler and WebSocket fan-out
     └── server/                   # HTTP API, security, go:embed of web/
-        └── web/                  # index.html, assets/{app,i18n,guide}.js, assets/app.css, favicon.svg
+        └── web/                  # index.html, assets/{app,v4,i18n,guide}.js, assets/{app,v4}.css, favicon.svg
 ```
 
 Every package has platform-neutral logic (parsing, diffing, CPU maths, classification, winget table parsing) that is unit-tested on any OS. Only the thin `*_windows.go` files call Win32.
@@ -70,7 +94,7 @@ Every package has platform-neutral logic (parsing, diffing, CPU maths, classific
 On **Windows**, with Go 1.23+ installed:
 
 ```bat
-build.bat               :: vet + test + build dist\syspulse.exe (v3.0.0, amd64)
+build.bat               :: vet + test + build dist\syspulse.exe (v4.0.0, amd64)
 build.bat 1.2.0 arm64   :: custom version / architecture
 set SKIP_TESTS=1 && build.bat
 ```
@@ -107,6 +131,8 @@ syspulse.exe -no-browser -addr 127.0.0.1:9100
 | `-enable-selftest` | `false` | Allow the synthetic radar self-test (off: live telemetry only). |
 | `-radar-client-procs` | | Extra comma-separated outbound-only process names ignored by the TCP-table sensor. |
 | `-no-resolve` | `false` | Do not resolve LAN device names (NetBIOS / mDNS / reverse DNS). |
+| `-rules-file` | `%LOCALAPPDATA%\SysPulse\rules.json` | Where alert rules are persisted. Pass an empty value to keep rules in memory only. |
+| `-services-interval` | `5s` | Windows service enumeration interval. |
 | `-v` | `false` | Debug logging. |
 | `-version` | | Print the version and exit. |
 
@@ -165,14 +191,24 @@ Only scan machines you own or are authorised to test.
 | GET | `/api/audit` | Last report per audit, running audits |
 | POST | `/api/audit/auth` · `/api/audit/reliability` `{"hours":168}` | Run a diagnostic audit (token + origin) |
 | GET | `/api/audit/{kind}/export?format=json\|csv&lang=&token=` | Download the audit report |
+| GET | `/api/interfaces` | Per-interface rates, totals and 60 s history |
+| GET | `/api/services` | Service list and summary |
+| GET | `/api/processes/tree` | Process hierarchy with subtree CPU / memory and hosted services |
+| GET | `/api/health/score` | Health score, grade and deductions |
+| GET | `/api/rules` | Rules, live rule states and the metric catalog |
+| POST / PUT / DELETE | `/api/rules`, `/api/rules/{id}` | Create / update / delete a rule (token + origin; unknown fields rejected) |
+| POST | `/api/rules/reset` | Restore the default rules (token + origin) |
 
-WebSocket messages are `{"type": ..., "data": ...}`, where `type` is one of `snapshot`, `metrics`, `processes`, `netdiff` (`added`/`removed`/`changed`), `netstats`, `events`, `eventsummary`, `software`, `radar`, `sweep`, `alert`, `alertcounts`, `alertsreset`, `audit` or `auditstate`. Each client has a bounded queue, and a slow client is disconnected so it cannot stall the collectors.
+WebSocket messages are `{"type": ..., "data": ...}`, where `type` is one of `snapshot`, `metrics`, `processes`, `netdiff` (`added`/`removed`/`changed`), `netstats`, `events`, `eventsummary`, `software`, `radar`, `sweep`, `alert`, `alertcounts`, `alertsreset`, `audit`, `auditstate`, `devices`, `ifstats`, `services`, `health`, `rules`, `rulestate` or `procmeta`. Each client has a bounded queue, and a slow client is disconnected so it cannot stall the collectors.
 
 ## Implementation notes
 
 - **Socket tables.** Calls are retried while they return `ERROR_INSUFFICIENT_BUFFER`. Ports are converted from network byte order. The row layouts (TCP4 24 B, TCP6 56 B, UDP4 12 B, UDP6 28 B) are parsed with bounds checks.
 - **CPU %.** Per process: Δ(kernel+user) / Δwall / cores. Samples are keyed by (PID, creation time), so a reused PID never inherits another process's counters. For the whole system, busy = (kernel + user − idle) / (kernel + user) from `GetSystemTimes`.
 - **Event log.** Reads are incremental: after the first window query, polls use `EventRecordID > last`. Publisher metadata handles are cached for `EvtFormatMessage`, and when rendering fails the message is rebuilt from `EventData`.
+- **Per-core CPU.** `NtQuerySystemInformation(SystemProcessorPerformanceInformation)` is called with a 64-entry buffer (one processor group). Busy % per core uses the same kernel-includes-idle formula as the system total.
+- **Interface throughput.** Rates are Δoctets / Δt between `GetIfTable2` snapshots. A counter that goes backwards (driver reset) yields 0 for that interval. Utilisation is max(in, out) × 8 / link speed.
+- **Rules engine.** `Evaluate(metric, observations)` touches only rules for that metric. The per-instance state holds the violation start, the firing flag and the last value. A firing alert uses the stable key `rule:<id>:<instance>`, so repeats fold into one alert with a count.
 - **winget parsing.** Columns are located from the header row using rune offsets, since winget pads with display width. Rows where a long name spills into the next column are re-split. Footer lines and progress spinners are discarded. Parsing works for any UI language whose table has an `Id` column.
 
 ## Limitations

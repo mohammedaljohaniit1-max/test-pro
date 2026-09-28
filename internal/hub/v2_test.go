@@ -67,22 +67,29 @@ func TestTableSensorDetectsSweep(t *testing.T) {
 	}
 }
 
-func TestResourceAlertHysteresis(t *testing.T) {
+func TestResourceRulesReplaceHardcodedAlerts(t *testing.T) {
 	h, _ := newHub(t)
+	clock := time.Unix(1_700_000_000, 0)
+	h.Rules().SetClock(func() time.Time { return clock })
 	m := model.SystemMetrics{Disks: []model.DiskUsage{{Mount: `C:\`, Percent: 95}}}
-	h.resourceAlerts(m)
-	h.resourceAlerts(m)
+	h.evalHostRules(m, nil)
+	h.evalHostRules(m, nil)
 	if n := h.Alerts().Counts().ByCategory[model.AlertResource]; n != 1 {
 		t.Fatalf("disk alerts %d", n)
 	}
-	for i := 0; i < 29; i++ {
-		h.resourceAlerts(model.SystemMetrics{CPUPercent: 99})
+	for i := 0; i < 30; i++ {
+		clock = clock.Add(time.Second)
+		h.evalHostRules(model.SystemMetrics{CPUPercent: 99}, nil)
 	}
 	if n := h.Alerts().Counts().ByCategory[model.AlertResource]; n != 1 {
-		t.Fatal("CPU alert raised before 30 samples")
+		t.Fatal("CPU alert raised before the rule duration elapsed")
 	}
-	h.resourceAlerts(model.SystemMetrics{CPUPercent: 99})
+	clock = clock.Add(time.Second)
+	h.evalHostRules(model.SystemMetrics{CPUPercent: 99}, nil)
 	if n := h.Alerts().Counts().ByCategory[model.AlertResource]; n != 2 {
 		t.Fatalf("CPU alert missing: %d", n)
+	}
+	if hl := h.Health(); hl.Score >= 100 || len(hl.Factors) == 0 {
+		t.Fatalf("health %+v", hl)
 	}
 }

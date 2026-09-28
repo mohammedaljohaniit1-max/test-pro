@@ -1,6 +1,6 @@
 //go:build windows
 
-// Command syspulse (3.0) is a Windows system diagnostics and observability
+// Command syspulse (4.0) is a Windows system diagnostics and observability
 // dashboard: live sockets, processes, system resources, event log
 // reliability analysis and software updates via winget, served from an
 // embedded web UI on http://localhost:9099.
@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -23,12 +24,14 @@ import (
 
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/eventlog"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/hub"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/ifstats"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/model"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/netnames"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/procmon"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/radar"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/server"
+	"github.com/mohammedaljohaniit1-max/test-pro/internal/services"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/software"
 	"github.com/mohammedaljohaniit1-max/test-pro/internal/sysmon"
 )
@@ -98,6 +101,8 @@ func main() {
 		selfTest = flag.Bool("enable-selftest", false, "allow the synthetic radar self-test (off by default: the dashboard shows only real host telemetry)")
 		clients  = flag.String("radar-client-procs", "", "extra comma-separated outbound-only process names ignored by the TCP-table sensor (browsers and updaters are built in)")
 		noRes    = flag.Bool("no-resolve", false, "disable NetBIOS / mDNS / reverse-DNS name resolution of LAN devices")
+		rulesF   = flag.String("rules-file", defaultRulesFile(), "JSON file that stores the alert rules (empty = keep rules in memory only)")
+		svcEvery = flag.Duration("services-interval", 5*time.Second, "Windows service enumeration interval")
 		verbose  = flag.Bool("v", false, "verbose logging")
 		version  = flag.Bool("version", false, "print version and exit")
 	)
@@ -129,7 +134,10 @@ func main() {
 		EventWindow: *window, MaxEvents: *maxEv, Channels: []string{"System", "Application"},
 		RadarWindow: *radarWin, RadarThreshold: *radarThr, RadarCooldown: *radarCD, RadarAllow: splitList(*radarAll),
 		SelfTest: *selfTest, ClientProcs: splitList(*clients), NoResolve: *noRes, Resolver: netnames.New(),
+		ServicesEvery: *svcEvery, RulesFile: *rulesF,
 	}, log, sm, pm, tracker, eventSource{er})
+	h.SetInterfaceReader(ifstats.NewSystemReader())
+	h.SetServiceLister(services.NewSystemLister())
 	rp := radar.NewSystemPlatform()
 	h.SetRadarPlatform(rp)
 	h.SetGateways(rp.Gateways())
@@ -183,9 +191,18 @@ func banner(addr string, elevated bool) string {
 
   Dashboard : http://%s/
   Privileges: %s
+  Shortcuts : Ctrl+K command palette · [ collapse sidebar
   Press Ctrl+C to stop.
 
 `, server.Version, addr, mode)
+}
+
+// defaultRulesFile is %LOCALAPPDATA%\SysPulse\rules.json.
+func defaultRulesFile() string {
+	if d, err := os.UserCacheDir(); err == nil && d != "" {
+		return filepath.Join(d, "SysPulse", "rules.json")
+	}
+	return ""
 }
 
 func splitList(s string) []string {

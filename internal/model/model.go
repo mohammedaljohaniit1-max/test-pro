@@ -93,6 +93,12 @@ type SystemMetrics struct {
 	Disks       []DiskUsage `json:"disks"`
 	Hostname    string      `json:"hostname"`
 	OS          string      `json:"os"`
+
+	// SysPulse 4.0 granularity.
+	PerCore   []float64  `json:"perCore,omitempty"` // busy % per logical processor
+	KernelPct float64    `json:"kernelPct"`         // privileged (kernel) share of total CPU time
+	UserPct   float64    `json:"userPct"`
+	Mem       *MemDetail `json:"memDetail,omitempty"`
 }
 
 // DiskUsage describes one logical volume.
@@ -268,6 +274,7 @@ const (
 	AlertReliability  = "reliability"
 	AlertResource     = "resource"
 	AlertSystem       = "system"
+	AlertNetwork      = "network"
 )
 
 // Alert is one entry in the Alerts & Incidents stream.
