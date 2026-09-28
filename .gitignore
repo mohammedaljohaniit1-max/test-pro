@@ -1,8 +1,8 @@
 /.toolchain/
 /bin/
 /dist/
+*.exe
 *.test
 *.out
 *.prof
 coverage.*
-/data/

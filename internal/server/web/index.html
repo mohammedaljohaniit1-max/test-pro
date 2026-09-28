@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="syspulse-token" content="{{TOKEN}}">
+<meta name="syspulse-mode" content="{{MODE}}">
+<meta name="color-scheme" content="dark">
+<title>SysPulse 4.0 — Windows Observability &amp; Reliability Control Plane</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/assets/v4.css">
+</head>
+<body>
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-health" viewBox="0 0 24 24"><path d="M20.8 11.2A5.4 5.4 0 0 0 12 5.6a5.4 5.4 0 0 0-8.8 5.6"/><path d="M2 12h4l2-4 4 8 2-4h8"/><path d="M5 15.5 12 21l7-5.5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+  <symbol id="i-storage" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></symbol>
+  <symbol id="i-services" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+  <symbol id="i-sockets" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></symbol>
+  <symbol id="i-bandwidth" viewBox="0 0 24 24"><path d="M7 20V4M3 8l4-4 4 4"/><path d="M17 4v16M13 16l4 4 4-4"/></symbol>
+  <symbol id="i-devices" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6M9 14v4"/><rect x="17.5" y="8" width="4.5" height="12" rx="1"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 6.4-6.4"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-3h14v3"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="i-events" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-update" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M12 8v5l3 2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M6.5 17A2.5 2.5 0 0 0 4 19.5 2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 10l-2 2 2 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+<div class="shell" id="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Primary">
+    <div class="brand">
+      <canvas class="ekg-canvas" id="ekg" width="120" height="32" aria-hidden="true"></canvas>
+      <div class="brand-txt"><span class="name neon" data-text="SysPulse">Sys<b>Pulse</b></span><span class="ver">v{{VERSION}}</span></div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-group" data-group="hub">
+        <div class="nav-gh" data-i18n="grp.hub"></div>
+        <button class="nav-item" data-view="overview" title=""><svg class="ico"><use href="#i-overview"/></svg><span class="nl" data-i18n="nav.overview"></span></button>
+        <button class="nav-item" data-view="health" title=""><svg class="ico"><use href="#i-health"/></svg><span class="nl" data-i18n="nav.health"></span> <span class="badge ok" id="b-health">0</span></button>
+        <button class="nav-item" data-view="alerts" title=""><svg class="ico"><use href="#i-alert"/></svg><span class="nl" data-i18n="nav.alerts"></span> <span class="badge crit" id="b-alerts">0</span></button>
+        <button class="nav-item" data-view="rules" title=""><svg class="ico"><use href="#i-rules"/></svg><span class="nl" data-i18n="nav.rules"></span> <span class="badge crit zero" id="b-rules">0</span></button>
+      </div>
+      <div class="nav-group" data-group="host">
+        <div class="nav-gh" data-i18n="grp.host"></div>
+        <button class="nav-item" data-view="cpu" title=""><svg class="ico"><use href="#i-cpu"/></svg><span class="nl" data-i18n="nav.cpu"></span> <span class="badge" id="b-cpu">0</span></button>
+        <button class="nav-item" data-view="storage" title=""><svg class="ico"><use href="#i-storage"/></svg><span class="nl" data-i18n="nav.storage"></span> <span class="badge" id="b-disk">0</span></button>
+        <button class="nav-item" data-view="services" title=""><svg class="ico"><use href="#i-services"/></svg><span class="nl" data-i18n="nav.services"></span> <span class="badge warn zero" id="b-svc">0</span></button>
+      </div>
+      <div class="nav-group" data-group="net">
+        <div class="nav-gh" data-i18n="grp.net"></div>
+        <button class="nav-item" data-view="sockets" title=""><svg class="ico"><use href="#i-sockets"/></svg><span class="nl" data-i18n="nav.sockets"></span> <span class="badge" id="b-net">0</span></button>
+        <button class="nav-item" data-view="bandwidth" title=""><svg class="ico"><use href="#i-bandwidth"/></svg><span class="nl" data-i18n="nav.bandwidth"></span> <span class="badge" id="b-if">0</span></button>
+        <button class="nav-item" data-view="devices" title=""><svg class="ico"><use href="#i-devices"/></svg><span class="nl" data-i18n="nav.devices"></span> <span class="badge" id="b-dev">0</span></button>
+        <button class="nav-item" data-view="radar" title=""><svg class="ico"><use href="#i-radar"/></svg><span class="nl" data-i18n="nav.radar"></span> <span class="badge crit" id="b-radar">0</span></button>
+      </div>
+      <div class="nav-group" data-group="proc">
+        <div class="nav-gh" data-i18n="grp.proc"></div>
+        <button class="nav-item" data-view="ptree" title=""><svg class="ico"><use href="#i-tree"/></svg><span class="nl" data-i18n="nav.ptree"></span> <span class="badge" id="b-proc">0</span></button>
+        <button class="nav-item" data-view="procs" title=""><svg class="ico"><use href="#i-flame"/></svg><span class="nl" data-i18n="nav.procs"></span> <span class="badge warn zero" id="b-hot">0</span></button>
+      </div>
+      <div class="nav-group" data-group="diag">
+        <div class="nav-gh" data-i18n="grp.diag"></div>
+        <button class="nav-item" data-view="events" title=""><svg class="ico"><use href="#i-events"/></svg><span class="nl" data-i18n="nav.events"></span> <span class="badge warn" id="b-ev">0</span></button>
+        <button class="nav-item" data-view="diagnostics" title=""><svg class="ico"><use href="#i-shield"/></svg><span class="nl" data-i18n="nav.diagnostics"></span> <span class="badge zero" id="b-diag">0</span></button>
+      </div>
+      <div class="nav-group" data-group="sw">
+        <div class="nav-gh" data-i18n="grp.sw"></div>
+        <button class="nav-item" data-view="software" title=""><svg class="ico"><use href="#i-package"/></svg><span class="nl" data-i18n="nav.software"></span> <span class="badge" id="b-apps">0</span></button>
+        <button class="nav-item" data-view="updates" title=""><svg class="ico"><use href="#i-update"/></svg><span class="nl" data-i18n="nav.updates"></span> <span class="badge ok" id="b-sw">0</span></button>
+      </div>
+      <div class="nav-group" data-group="doc">
+        <div class="nav-gh" data-i18n="grp.doc"></div>
+        <button class="nav-item" data-view="guide" title=""><svg class="ico"><use href="#i-book"/></svg><span class="nl" data-i18n="nav.guide"></span></button>
+      </div>
+    </nav>
+    <div class="side-foot">
+      <button class="nav-item collapse-btn" id="side-collapse" data-i18n-title="side.collapse" title="Collapse sidebar"><svg class="ico"><use href="#i-collapse"/></svg><span class="nl" data-i18n="side.collapse">Collapse sidebar</span><kbd>[</kbd></button>
+    </div>
+  </aside>
+  <div class="side-scrim" id="side-scrim" hidden></div>
+
+  <div class="main-col">
+    <header class="topbar">
+      <button class="iconbtn only-mobile" id="side-open" aria-label="Menu"><svg class="ico"><use href="#i-menu"/></svg></button>
+      <div class="crumbs"><span class="crumb-g" id="crumb-g"></span><svg class="ico xs crumb-sep"><use href="#i-chev"/></svg><span class="crumb-v" id="crumb-v"></span><span class="host muted" id="host-line">–</span></div>
+      <div class="hstats" id="hstats">
+        <button class="hs" data-goto="cpu" id="hs-cpu"><span class="hs-k">CPU</span><span class="hs-v">–</span><i class="hs-bar"><i data-w="0"></i></i></button>
+        <button class="hs" data-goto="cpu" id="hs-mem"><span class="hs-k" data-i18n="hs.mem">MEM</span><span class="hs-v">–</span><i class="hs-bar"><i data-w="0"></i></i></button>
+        <button class="hs" data-goto="bandwidth" id="hs-net"><span class="hs-k" data-i18n="hs.net">NET</span><span class="hs-v mono">–</span></button>
+        <button class="hs" data-goto="health" id="hs-health"><span class="hs-dot"></span><span class="hs-k" data-i18n="hs.health">HEALTH</span><span class="hs-v">–</span></button>
+      </div>
+      <span class="mode-badge" id="mode-badge" hidden></span>
+      <button class="cmdk" id="cmdk-open" aria-label="Command palette"><svg class="ico sm"><use href="#i-search"/></svg><span data-i18n="cmd.search">Search or jump to…</span><kbd id="cmdk-kbd">Ctrl K</kbd></button>
+      <div class="topright">
+        <button class="iconbtn" id="sound-toggle" data-i18n-title="sound.toggle" title="Alert sound">🔔</button>
+        <div class="lang" role="group" aria-label="Language">
+          <button class="lang-btn active" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="ar">AR</button>
+        </div>
+        <div class="status"><span id="conn-dot" class="dot"></span><span id="conn-text" data-i18n="conn.connecting">connecting…</span></div>
+      </div>
+    </header>
+
+<!-- Red warning banner for connection sweeps -->
+<div id="sweep-banner" class="sweep-banner" hidden role="alert" aria-live="assertive">
+  <div class="sb-icon">⚠</div>
+  <div class="sb-body">
+    <div class="sb-title" id="sb-title"></div>
+    <div class="sb-grid">
+      <div><span class="sb-k" data-i18n="sweep.remoteIp">Remote IP</span><span class="sb-v mono" id="sb-ip"></span></div>
+      <div><span class="sb-k" data-i18n="sweep.mac">MAC address</span><span class="sb-v mono" id="sb-mac"></span></div>
+      <div><span class="sb-k" data-i18n="sweep.iface">Interface</span><span class="sb-v" id="sb-if"></span></div>
+      <div><span class="sb-k" data-i18n="sweep.ports">Target port range</span><span class="sb-v mono" id="sb-ports"></span></div>
+      <div><span class="sb-k" data-i18n="sweep.distinct">Distinct ports</span><span class="sb-v mono" id="sb-count"></span></div>
+      <div><span class="sb-k" data-i18n="sweep.time">Timestamp</span><span class="sb-v mono" id="sb-time"></span></div>
+    </div>
+  </div>
+  <div class="sb-actions">
+    <span class="sb-more" id="sb-more"></span>
+    <button class="btn small light" id="sb-view" data-i18n="sweep.view">View in radar</button>
+    <button class="btn small ghost" id="sb-dismiss" data-i18n="sweep.dismiss">Dismiss</button>
+  </div>
+</div>
+
+<main id="main">
+  <section id="view-overview" class="panel" data-view="overview">
+    <div class="view-head"><div><h1 data-i18n="nav.overview"></h1><p class="muted" data-i18n="desc.overview"></p></div><div class="view-actions" id="va-overview"></div></div>
+    <div class="cards">
+      <div class="card glass"><div class="k" data-i18n="ov.cpu">CPU</div><div class="v" id="c-cpu">–</div><div class="s" id="c-cores">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="ov.memory">Memory</div><div class="v" id="c-mem">–</div><div class="s" id="c-mem2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="ov.commit">Commit</div><div class="v" id="c-commit">–</div><div class="s" id="c-commit2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="ov.processes">Processes</div><div class="v" id="c-procs">–</div><div class="s" id="c-threads">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="ov.sockets">Sockets</div><div class="v" id="c-socks">–</div><div class="s" id="c-rate">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="ov.uptime">Uptime</div><div class="v" id="c-up">–</div><div class="s" data-i18n="ov.sinceBoot">since last boot</div></div>
+      <div class="card clickable glowcard" data-goto="health"><div class="k" data-i18n="ov.health">Health score</div><div class="v" id="c-health">–</div><div class="s" id="c-health2">–</div></div>
+      <div class="card clickable" data-goto="bandwidth"><div class="k" data-i18n="ov.throughput">Network throughput</div><div class="v small-v" id="c-net">–</div><div class="s" id="c-net2">–</div></div>
+      <div class="card clickable" data-goto="radar"><div class="k" data-i18n="ov.radar">Sweep radar</div><div class="v" id="c-radar">–</div><div class="s" id="c-radar2">–</div></div>
+      <div class="card clickable" data-goto="alerts"><div class="k" data-i18n="ov.alerts">Open alerts</div><div class="v" id="c-alerts">–</div><div class="s" id="c-alerts2">–</div></div>
+    </div>
+    <div class="grid2">
+      <div class="box glass"><h3 data-i18n="ov.chart">CPU &amp; memory — last 5 minutes</h3><canvas id="ch-sys" height="220"></canvas>
+        <div class="legend"><span class="l-cpu" data-i18n="ov.cpuPct">CPU %</span><span class="l-mem" data-i18n="ov.memPct">Memory %</span></div></div>
+      <div class="box glass"><h3 data-i18n="ov.disks">Disks</h3><div id="disks"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="box glass"><h3 data-i18n="ov.topProcs">Top processes by CPU</h3><table class="mini"><tbody id="top-procs"></tbody></table></div>
+      <div class="box glass"><h3 data-i18n="ov.recent">Recent errors &amp; warnings</h3><ul class="feed" id="ov-feed"></ul></div>
+    </div>
+  </section>
+  <section id="view-health" class="panel" data-view="health">
+    <div class="view-head"><div><h1 data-i18n="nav.health"></h1><p class="muted" data-i18n="desc.health"></p></div><div class="view-actions" id="va-health"></div></div>
+    <div class="health-grid">
+      <div class="box glass gauge-box">
+        <svg class="gauge" id="gauge" viewBox="0 0 240 150" role="img" aria-labelledby="g-score">
+          <defs><linearGradient id="gauge-g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f43f5e"/><stop offset=".5" stop-color="#fbbf24"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+          <path class="g-track" d="M20 130 A100 100 0 0 1 220 130"/>
+          <path class="g-fill" id="g-fill" d="M20 130 A100 100 0 0 1 220 130" pathLength="100" stroke-dasharray="0 100"/>
+          <g id="g-ticks"></g>
+          <text x="120" y="112" class="g-score" id="g-score">–</text>
+          <text x="120" y="138" class="g-grade" id="g-grade"></text>
+        </svg>
+        <div class="gauge-sub" id="g-sub"></div>
+      </div>
+      <div class="box glass">
+        <h3 data-i18n="health.pulse">Live host pulse</h3>
+        <canvas id="ekg-big" class="ekg-big" height="120"></canvas>
+        <div class="pulse-stats" id="pulse-stats"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="box glass"><h3 data-i18n="health.factors">Score deductions</h3><div id="h-factors"></div></div>
+      <div class="box glass"><h3 data-i18n="health.trend">Health score — last 5 minutes</h3><canvas id="ch-health" height="170"></canvas>
+        <h3 class="mt" data-i18n="health.firing">Rules currently firing</h3><div id="h-firing"></div></div>
+    </div>
+  </section>
+  <section id="view-alerts" class="panel" data-view="alerts">
+    <div class="view-head"><div><h1 data-i18n="nav.alerts"></h1><p class="muted" data-i18n="desc.alerts"></p></div><div class="view-actions" id="va-alerts"></div></div>
+    <div class="sev-cards">
+      <button class="sev-card critical" data-sev="critical"><span class="n" id="a-crit">0</span><span class="t" data-i18n="sev.critical">Critical</span></button>
+      <button class="sev-card warning" data-sev="warning"><span class="n" id="a-warn">0</span><span class="t" data-i18n="sev.warning">Warning</span></button>
+      <button class="sev-card info" data-sev="info"><span class="n" id="a-info">0</span><span class="t" data-i18n="sev.info">Informational</span></button>
+      <div class="sev-card plain"><span class="n" id="a-unacked-n">0</span><span class="t" data-i18n="alerts.unacked">Unacknowledged</span></div>
+      <div class="sev-card plain"><span class="n" id="a-24h">0</span><span class="t" data-i18n="alerts.last24">Last 24 h</span></div>
+    </div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3 data-i18n="alerts.title">Alerts &amp; Incidents</h3>
+        <div class="chips" id="a-sev-chips">
+          <button class="chip active" data-sevf="" data-i18n="alerts.all">All</button>
+          <button class="chip critical" data-sevf="critical" data-i18n="sev.critical">Critical</button>
+          <button class="chip warning" data-sevf="warning" data-i18n="sev.warning">Warning</button>
+          <button class="chip info" data-sevf="info" data-i18n="sev.info">Informational</button>
+        </div>
+        <select id="a-cat"><option value="" data-i18n="alerts.allCats">All categories</option></select>
+        <input id="a-q" type="search" data-i18n-ph="alerts.search" placeholder="Search alerts…">
+        <label class="chk"><input type="checkbox" id="a-unacked"> <span data-i18n="alerts.onlyUnacked">only unacknowledged</span></label>
+      </div>
+      <div class="toolbar sub">
+        <button class="btn small" id="a-ack-all" data-i18n="alerts.ackAll">Acknowledge all</button>
+        <button class="btn small ghost" id="a-clear" data-i18n="alerts.clear">Clear</button>
+        <span class="spacer"></span>
+        <span class="muted" data-i18n="alerts.exportLbl">Export (current filter):</span>
+        <button class="btn small" id="a-exp-json">JSON</button>
+        <button class="btn small" id="a-exp-csv">CSV</button>
+      </div>
+      <div class="tablewrap"><table class="grid" id="a-table">
+        <thead><tr><th data-i18n="col.severity">Severity</th><th data-i18n="col.time">Time</th><th data-i18n="col.category">Category</th><th data-i18n="col.alert">Alert</th><th data-i18n="col.details">Details</th><th class="num" data-i18n="col.count">Count</th><th data-i18n="col.sourceMod">Source</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="a-foot"></div>
+    </div>
+  </section>
+  <section id="view-rules" class="panel" data-view="rules">
+    <div class="view-head"><div><h1 data-i18n="nav.rules"></h1><p class="muted" data-i18n="desc.rules"></p></div><div class="view-actions" id="va-rules"></div></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="rules.title">Threshold alert rules</span> <span class="muted" id="rules-count"></span></h3>
+        <input id="rules-q" type="search" data-i18n-ph="rules.filter" placeholder="Filter rules…">
+        <button class="btn small" id="rules-new"><svg class="ico sm"><use href="#i-plus"/></svg> <span data-i18n="rules.new">New rule</span></button>
+        <button class="btn small ghost" id="rules-reset" data-i18n="rules.reset">Restore defaults</button>
+      </div>
+      <p class="muted small rules-help" data-i18n="rules.help">A rule fires when its condition holds continuously for the configured duration and re-arms only after the value recovers past the hysteresis margin. Scoped metrics accept comma-separated globs (e.g. chrome*, msedge.exe or C:\).</p>
+      <div class="tablewrap"><table class="grid" id="rules-table"><thead><tr><th data-i18n="rules.col.on">On</th><th data-i18n="rules.col.name">Rule</th><th data-i18n="rules.col.cond">Condition</th>
+        <th data-i18n="rules.col.scope">Scope</th><th data-i18n="col.severity">Severity</th><th data-i18n="rules.col.state">Live state</th><th class="num" data-i18n="rules.col.fired">Fired</th><th data-i18n="col.actions">Actions</th></tr></thead><tbody></tbody></table></div>
+      <div class="foot" id="rules-foot"></div>
+    </div>
+  </section>
+  <section id="view-cpu" class="panel" data-view="cpu">
+    <div class="view-head"><div><h1 data-i18n="nav.cpu"></h1><p class="muted" data-i18n="desc.cpu"></p></div><div class="view-actions" id="va-cpu"></div></div>
+    <div class="cards">
+      <div class="card glass"><div class="k" data-i18n="cpu.total">Total CPU</div><div class="v" id="p-cpu">–</div><div class="s" id="p-cores">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="cpu.kernel">Kernel (privileged)</div><div class="v" id="p-kernel">–</div><div class="s" data-i18n="cpu.kernelSub">drivers, DPCs &amp; interrupts</div></div>
+      <div class="card glass"><div class="k" data-i18n="cpu.user">User mode</div><div class="v" id="p-user">–</div><div class="s" data-i18n="cpu.userSub">applications</div></div>
+      <div class="card glass"><div class="k" data-i18n="cpu.hottest">Busiest core</div><div class="v" id="p-hot">–</div><div class="s" id="p-hot2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="cpu.imbalance">Core imbalance</div><div class="v" id="p-imb">–</div><div class="s" data-i18n="cpu.imbalanceSub">max − min core load</div></div>
+    </div>
+    <div class="box glass">
+      <div class="toolbar"><h3><span data-i18n="cpu.heatmap">Per-core utilisation heatmap</span> <span class="muted" data-i18n="cpu.heatmapSub">(logical processors × last 60 s)</span></h3>
+        <div class="heat-legend"><span>0%</span><i class="hl-bar"></i><span>100%</span></div></div>
+      <canvas id="ch-heat" height="200"></canvas>
+      <div class="core-grid" id="core-grid"></div>
+      <div class="note" id="core-na" hidden data-i18n="cpu.noCores">Per-core counters are not available on this platform.</div>
+    </div>
+    <div class="grid2">
+      <div class="box glass"><h3 data-i18n="cpu.split">Kernel vs user time — last 5 minutes</h3><canvas id="ch-ku" height="200"></canvas>
+        <div class="legend"><span class="l-kern" data-i18n="cpu.kernel">Kernel</span><span class="l-user" data-i18n="cpu.user">User</span></div></div>
+      <div class="box glass"><h3 data-i18n="mem.title">Memory composition</h3>
+        <div class="memstack" id="mem-stack"><i class="ms-used" data-w="0"></i><i class="ms-avail" data-w="0"></i></div>
+        <div class="legend"><span class="l-used" data-i18n="mem.inUse">In use</span><span class="l-avail" data-i18n="mem.available">Available</span></div>
+        <dl class="kv mem-kv" id="mem-kv"></dl>
+      </div>
+    </div>
+  </section>
+  <section id="view-storage" class="panel" data-view="storage">
+    <div class="view-head"><div><h1 data-i18n="nav.storage"></h1><p class="muted" data-i18n="desc.storage"></p></div><div class="view-actions" id="va-storage"></div></div>
+    <div class="cards" id="st-sum"></div>
+    <div class="storage-matrix" id="st-matrix"></div>
+    <div class="box glass"><h3 data-i18n="st.table">Volume details</h3>
+      <div class="tablewrap"><table class="grid" id="st-table"><thead><tr><th data-k="mount" data-i18n="st.volume">Volume</th><th data-k="type" data-i18n="col.type">Type</th>
+        <th data-k="total" class="num" data-i18n="st.capacity">Capacity</th><th data-k="used" class="num" data-i18n="st.used">Used</th><th data-k="free" class="num" data-i18n="st.free">Free</th>
+        <th data-k="percent" class="num" data-i18n="st.pct">Used %</th><th data-i18n="st.status">Status</th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+  <section id="view-services" class="panel" data-view="services">
+    <div class="view-head"><div><h1 data-i18n="nav.services"></h1><p class="muted" data-i18n="desc.services"></p></div><div class="view-actions" id="va-services"></div></div>
+    <div class="cards" id="svc-cards"></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="svc.list">Services</span> <span class="muted" id="svc-count"></span></h3>
+        <input id="svc-q" type="search" data-i18n-ph="svc.filter" placeholder="Filter by name, display name, account or binary…">
+        <div class="chips" id="svc-chips" role="group">
+          <button class="chip active" data-sf="" data-i18n="svc.f.all">All</button>
+          <button class="chip" data-sf="running" data-i18n="svc.f.running">Running</button>
+          <button class="chip" data-sf="stopped" data-i18n="svc.f.stopped">Stopped</button>
+          <button class="chip critical" data-sf="failed" data-i18n="svc.f.failed">Auto-start failed</button>
+          <button class="chip warning" data-sf="autostopped" data-i18n="svc.f.autostopped">Auto-start not running</button>
+          <button class="chip" data-sf="disabled" data-i18n="svc.f.disabled">Disabled</button>
+        </div>
+        <select id="svc-start"><option value="" data-i18n="svc.allStart">All start types</option></select>
+      </div>
+      <div class="note" id="svc-err" hidden></div>
+      <div class="tablewrap"><table class="grid" id="svc-table"><thead><tr><th data-k="display" data-i18n="svc.col.display">Display name</th><th data-k="name" data-i18n="svc.col.name">Service name</th>
+        <th data-k="state" data-i18n="col.state">State</th><th data-k="startType" data-i18n="svc.col.start">Startup type</th><th data-k="pid" class="num" data-i18n="col.pid">PID</th>
+        <th data-k="type" data-i18n="col.type">Type</th><th data-k="account" data-i18n="svc.col.account">Log on as</th><th data-k="exitCode" class="num" data-i18n="svc.col.exit">Exit code</th></tr></thead><tbody></tbody></table></div>
+      <div class="foot" id="svc-foot"></div>
+    </div>
+  </section>
+  <section id="view-sockets" class="panel" data-view="sockets">
+    <div class="view-head"><div><h1 data-i18n="nav.sockets"></h1><p class="muted" data-i18n="desc.sockets"></p></div><div class="view-actions" id="va-sockets"></div></div>
+    <div class="grid3">
+      <div class="box glass"><h3 data-i18n="net.states">Connection states</h3><div id="net-states" class="bars"></div></div>
+      <div class="box glass"><h3 data-i18n="net.topProcs">Top processes by sockets</h3><div id="net-procs" class="bars"></div></div>
+      <div class="box glass"><h3 data-i18n="net.topRemotes">Top remote hosts (established)</h3><div id="net-remotes" class="bars"></div></div>
+    </div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3 data-i18n="net.active">Active sockets</h3>
+        <input id="net-q" type="search" data-i18n-ph="net.filter" placeholder="Filter by process, address, port, state…">
+        <select id="net-proto"><option value="" data-i18n="net.allProto">All protocols</option><option>TCP</option><option>TCP6</option><option>UDP</option><option>UDP6</option></select>
+        <select id="net-state"><option value="" data-i18n="net.allStates">All states</option><option>ESTABLISHED</option><option>LISTEN</option><option>TIME_WAIT</option><option>CLOSE_WAIT</option><option>SYN_SENT</option></select>
+        <label class="chk"><input type="checkbox" id="net-hide-local"> <span data-i18n="net.hideLoop">hide loopback</span></label>
+      </div>
+      <div class="tablewrap"><table class="grid" id="net-table">
+        <thead><tr><th data-k="proto" data-i18n="col.proto">Proto</th><th data-k="processName" data-i18n="col.process">Process</th><th data-k="pid" class="num" data-i18n="col.pid">PID</th><th data-k="localAddr" data-i18n="col.localAddr">Local address</th><th data-k="localPort" class="num" data-i18n="col.port">Port</th><th data-k="remoteAddr" data-i18n="col.remoteAddr">Remote address</th><th data-k="remotePort" class="num" data-i18n="col.port">Port</th><th data-k="state" data-i18n="col.state">State</th><th data-k="firstSeen" data-i18n="col.firstSeen">First seen</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="net-foot"></div>
+    </div>
+  </section>
+  <section id="view-bandwidth" class="panel" data-view="bandwidth">
+    <div class="view-head"><div><h1 data-i18n="nav.bandwidth"></h1><p class="muted" data-i18n="desc.bandwidth"></p></div><div class="view-actions" id="va-bandwidth"></div></div>
+    <div class="cards">
+      <div class="card glass"><div class="k" data-i18n="bw.totalIn">Total receive</div><div class="v in-t" id="bw-in">–</div><div class="s" id="bw-in2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="bw.totalOut">Total send</div><div class="v out-t" id="bw-out">–</div><div class="s" id="bw-out2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="bw.ifaces">Interfaces up</div><div class="v" id="bw-up">–</div><div class="s" id="bw-up2">–</div></div>
+      <div class="card glass"><div class="k" data-i18n="bw.busiest">Busiest interface</div><div class="v small-v" id="bw-top">–</div><div class="s" id="bw-top2">–</div></div>
+    </div>
+    <div class="box glass"><div class="toolbar"><h3 data-i18n="bw.aggregate">Aggregate throughput — last 60 s</h3>
+      <div class="legend"><span class="l-in" data-i18n="bw.in">Receive</span><span class="l-out" data-i18n="bw.out">Send</span></div></div>
+      <canvas id="ch-bw" height="160"></canvas></div>
+    <div class="box glass">
+      <div class="toolbar"><h3 data-i18n="bw.meters">Interface bandwidth meters</h3>
+        <input id="bw-q" type="search" data-i18n-ph="bw.filter" placeholder="Filter by interface, adapter or MAC…">
+        <label class="chk"><input type="checkbox" id="bw-virtual" checked> <span data-i18n="bw.showVirtual">virtual adapters</span></label>
+        <label class="chk"><input type="checkbox" id="bw-loop"> <span data-i18n="bw.showLoop">loopback</span></label>
+        <label class="chk"><input type="checkbox" id="bw-down"> <span data-i18n="bw.showDown">disconnected</span></label>
+      </div>
+      <div class="note" id="bw-err" hidden></div>
+      <div class="if-grid" id="if-grid"></div>
+    </div>
+  </section>
+  <section id="view-devices" class="panel" data-view="devices">
+    <div class="view-head"><div><h1 data-i18n="nav.devices"></h1><p class="muted" data-i18n="desc.devices"></p></div><div class="view-actions" id="va-devices"></div></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="dev.title">Local network devices</span> <span class="muted" id="dev-count"></span></h3>
+        <input id="dev-q" type="search" data-i18n-ph="dev.filter" placeholder="Filter by name, IP, MAC or vendor…">
+        <select id="dev-class"><option value="" data-i18n="dev.allClasses">All device types</option></select>
+        <button class="btn small" id="dev-resolve" data-i18n="dev.resolve">Resolve names</button>
+      </div>
+      <div class="dev-sum" id="dev-sum"></div>
+      <div class="tablewrap"><table class="grid" id="dev-table">
+        <thead><tr><th data-k="hostname" data-i18n="dev.col.device">Device</th><th data-k="ip" data-i18n="col.ip">IP address</th><th data-k="mac" data-i18n="col.mac">MAC address</th>
+          <th data-k="vendor" data-i18n="dev.col.vendor">Manufacturer</th><th data-k="class" data-i18n="dev.col.type">Type</th><th data-k="nameSource" data-i18n="dev.col.nameSrc">Name source</th>
+          <th data-k="interface" data-i18n="col.iface">Interface</th><th data-k="lastSeen" data-i18n="col.lastSeen">Last seen</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="dev-foot"></div>
+    </div>
+  </section>
+  <section id="view-radar" class="panel" data-view="radar">
+    <div class="view-head"><div><h1 data-i18n="nav.radar"></h1><p class="muted" data-i18n="desc.radar"></p></div><div class="view-actions" id="va-radar"></div></div>
+    <div class="radar-head">
+      <div class="rule-card">
+        <div class="k" data-i18n="radar.rule">Detection rule</div>
+        <div class="rule" id="radar-rule">–</div>
+        <div class="s" id="radar-sensors"></div>
+      </div>
+      <div class="cards compact">
+        <div class="card glass"><div class="k" data-i18n="radar.active">Active sweeps</div><div class="v crit-t" id="r-active">0</div></div>
+        <div class="card glass"><div class="k" data-i18n="radar.tracked">Tracked remote IPs</div><div class="v" id="r-tracked">0</div></div>
+        <div class="card glass"><div class="k" data-i18n="radar.rate">Inbound attempts / s</div><div class="v" id="r-rate">0</div></div>
+        <div class="card glass"><div class="k" data-i18n="radar.arp">ARP neighbours</div><div class="v" id="r-arp">0</div></div>
+      </div>
+      <div class="rule-actions">
+        <button class="btn" id="radar-test" data-i18n="radar.selftest">Run safe self-test</button>
+        <button class="btn ghost" id="radar-arp-btn" data-i18n="radar.showArp">ARP table</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="box glass"><h3 data-i18n="radar.chart">Inbound connection attempts — last 60 s</h3><canvas id="ch-radar" height="150"></canvas></div>
+      <div class="box glass"><h3 data-i18n="radar.incidents">Sweep incidents</h3><div id="radar-incidents" class="incidents"></div></div>
+    </div>
+    <div class="box glass">
+      <div class="toolbar"><h3 data-i18n="radar.hosts">Connection frequency &amp; port breadth per remote IP</h3>
+        <input id="radar-q" type="search" data-i18n-ph="radar.filter" placeholder="Filter by IP or MAC…"></div>
+      <div class="tablewrap"><table class="grid" id="radar-table">
+        <thead><tr><th data-i18n="col.remoteIp">Remote IP</th><th data-i18n="col.mac">MAC address</th><th data-i18n="dev.col.vendor">Manufacturer</th><th data-i18n="col.iface">Interface</th>
+          <th class="num" data-i18n="col.portsWindow">Ports / window</th><th data-i18n="col.pressure">Rule pressure</th><th class="num" data-i18n="col.connsWindow">Attempts / window</th>
+          <th class="num" data-i18n="col.rate">Rate (60 s)</th><th class="num" data-i18n="col.distinct">Distinct ports</th><th class="num" data-i18n="col.total">Total</th><th data-i18n="col.lastSeen">Last seen</th><th data-i18n="col.sensor">Sensor</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="radar-foot"></div>
+    </div>
+  </section>
+  <section id="view-ptree" class="panel" data-view="ptree">
+    <div class="view-head"><div><h1 data-i18n="nav.ptree"></h1><p class="muted" data-i18n="desc.ptree"></p></div><div class="view-actions" id="va-ptree"></div></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="tree.title">Process hierarchy</span> <span class="muted" id="tree-count"></span></h3>
+        <input id="tree-q" type="search" data-i18n-ph="tree.filter" placeholder="Find process by name, PID, service or path…">
+        <select id="tree-sort"><option value="subCpu" data-i18n="tree.sort.subCpu">Sort: subtree CPU</option><option value="subWs" data-i18n="tree.sort.subWs">Sort: subtree memory</option><option value="name" data-i18n="tree.sort.name">Sort: name</option><option value="pid" data-i18n="tree.sort.pid">Sort: PID</option></select>
+        <button class="btn small ghost" id="tree-expand" data-i18n="tree.expand">Expand all</button>
+        <button class="btn small ghost" id="tree-collapse" data-i18n="tree.collapse">Collapse all</button>
+      </div>
+      <div class="tablewrap tall"><table class="grid tree" id="tree-table"><thead><tr>
+        <th data-i18n="col.name">Name</th><th class="num" data-i18n="col.pid">PID</th><th class="num" data-i18n="col.cpu">CPU %</th><th class="num" data-i18n="tree.subCpu">Tree CPU</th>
+        <th data-i18n="tree.mem">Working set / private</th><th class="num" data-i18n="col.threads">Threads</th><th class="num" data-i18n="tree.socks">Sockets</th><th data-i18n="tree.services">Hosted services</th><th data-i18n="col.actions">Actions</th>
+      </tr></thead><tbody></tbody></table></div>
+      <div class="foot" id="tree-foot"></div>
+    </div>
+  </section>
+  <section id="view-procs" class="panel" data-view="procs">
+    <div class="view-head"><div><h1 data-i18n="nav.procs"></h1><p class="muted" data-i18n="desc.procs"></p></div><div class="view-actions" id="va-procs"></div></div>
+    <div class="grid3">
+      <div class="box glass"><h3 data-i18n="hot.cpu">Sustained CPU — 60 s average</h3><div id="hot-cpu" class="bars"></div></div>
+      <div class="box glass"><h3 data-i18n="hot.mem">Largest working sets</h3><div id="hot-mem" class="bars"></div></div>
+      <div class="box glass"><h3 data-i18n="hot.growth">Fastest private-bytes growth (60 s)</h3><div id="hot-grow" class="bars"></div></div>
+    </div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3 data-i18n="proc.title">Processes</h3>
+        <input id="proc-q" type="search" data-i18n-ph="proc.filter" placeholder="Filter by name, PID or path…">
+        <div class="chips" id="proc-chips" role="group">
+          <button class="chip active" data-pf="" data-i18n="proc.f.all">All</button>
+          <button class="chip hot" data-pf="cpu" data-i18n="proc.f.cpu">High CPU</button>
+          <button class="chip hot" data-pf="mem" data-i18n="proc.f.mem">High memory</button>
+          <button class="chip" data-pf="top" data-i18n="proc.f.top">Top 10 consumers</button>
+          <button class="chip" data-pf="denied" data-i18n="proc.f.denied">Protected</button>
+        </div>
+        <label class="chk"><span data-i18n="proc.cpuMin">CPU ≥</span> <select id="proc-cpu-min"><option value="1">1%</option><option value="5" selected>5%</option><option value="10">10%</option><option value="25">25%</option></select></label>
+        <label class="chk"><span data-i18n="proc.memMin">RAM ≥</span> <select id="proc-mem-min"><option value="104857600">100 MB</option><option value="268435456">256 MB</option><option value="536870912" selected>512 MB</option><option value="1073741824">1 GB</option></select></label>
+      </div>
+      <div class="tablewrap"><table class="grid" id="proc-table">
+        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="pid" class="num" data-i18n="col.pid">PID</th><th data-k="ppid" class="num" data-i18n="col.parent">Parent</th><th data-k="cpu" class="num" data-i18n="col.cpu">CPU %</th><th data-k="workingSet" class="num" data-i18n="col.ws">Working set</th><th data-k="private" class="num" data-i18n="col.private">Private</th><th data-k="threads" class="num" data-i18n="col.threads">Threads</th><th data-k="started" data-i18n="col.started">Started</th><th data-k="path" data-i18n="col.path">Path</th><th data-i18n="col.actions">Actions</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="proc-foot"></div>
+    </div>
+  </section>
+  <section id="view-events" class="panel" data-view="events">
+    <div class="view-head"><div><h1 data-i18n="nav.events"></h1><p class="muted" data-i18n="desc.events"></p></div><div class="view-actions" id="va-events"></div></div>
+    <div class="box glass"><h3><span data-i18n="ev.volume">Event volume — last 7 days</span> <span class="muted" data-i18n="ev.buckets">(3-hour buckets)</span></h3><canvas id="ch-ev" height="170"></canvas>
+      <div class="legend"><span class="l-crit" data-i18n="lvl.critical">Critical</span><span class="l-err" data-i18n="lvl.error">Error</span><span class="l-warn" data-i18n="lvl.warning">Warning</span><span class="l-info" data-i18n="lvl.info">Info</span></div></div>
+    <div class="cats" id="ev-cats"></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3 data-i18n="ev.title">Events</h3>
+        <input id="ev-q" type="search" data-i18n-ph="ev.search" placeholder="Search source or message…">
+        <select id="ev-level"><option value="" data-i18n="ev.allLevels">All levels</option><option value="critical" data-i18n="lvl.critical">Critical</option><option value="error" data-i18n="lvl.error">Error</option><option value="warning" data-i18n="lvl.warning">Warning</option><option value="info" data-i18n="lvl.info">Info</option></select>
+        <select id="ev-cat"><option value="" data-i18n="ev.allCats">All categories</option></select>
+        <select id="ev-chan"><option value="" data-i18n="ev.allChannels">All channels</option><option value="System">System</option><option value="Application">Application</option></select>
+      </div>
+      <div class="toolbar sub">
+        <div class="chips" id="ev-lvl-chips" role="group">
+          <button class="chip critical" data-lv="critical"><span data-i18n="lvl.critical">Critical</span> <b class="cnt" id="evc-critical">0</b></button>
+          <button class="chip error" data-lv="error"><span data-i18n="lvl.error">Error</span> <b class="cnt" id="evc-error">0</b></button>
+          <button class="chip warning" data-lv="warning"><span data-i18n="lvl.warning">Warning</span> <b class="cnt" id="evc-warning">0</b></button>
+          <button class="chip info" data-lv="info"><span data-i18n="lvl.info">Info</span> <b class="cnt" id="evc-info">0</b></button>
+        </div>
+        <div class="chips" id="ev-range-chips" role="group">
+          <button class="chip" data-range="1" data-i18n="range.1h">1 h</button>
+          <button class="chip" data-range="24" data-i18n="range.24h">24 h</button>
+          <button class="chip" data-range="72" data-i18n="range.3d">3 days</button>
+          <button class="chip active" data-range="" data-i18n="range.all">All</button>
+        </div>
+        <label class="chk"><span data-i18n="range.from">From</span> <input type="datetime-local" id="ev-from"></label>
+        <label class="chk"><span data-i18n="range.to">To</span> <input type="datetime-local" id="ev-to"></label>
+        <button class="btn small ghost" id="ev-reset" data-i18n="filters.reset">Reset filters</button>
+      </div>
+      <div class="note" id="ev-err" hidden></div>
+      <div class="tablewrap"><table class="grid" id="ev-table">
+        <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.level">Level</th><th data-i18n="col.category">Category</th><th data-i18n="col.source">Source</th><th class="num" data-i18n="col.id">ID</th><th data-i18n="col.channel">Channel</th><th data-i18n="col.message">Message</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="foot" id="ev-foot"></div>
+    </div>
+  </section>
+  <section id="view-diagnostics" class="panel" data-view="diagnostics">
+    <div class="view-head"><div><h1 data-i18n="nav.diagnostics"></h1><p class="muted" data-i18n="desc.diagnostics"></p></div><div class="view-actions" id="va-diagnostics"></div></div>
+    <div class="diag-buttons">
+      <div class="diag-card">
+        <div class="diag-ico">🔐</div>
+        <div class="diag-txt"><h3 data-i18n="diag.authTitle">Audit Authentication &amp; Access Logs</h3>
+          <p class="muted" data-i18n="diag.authDesc">Reads the Security log: repeated failed logons (4625), lockouts (4740) and administrative privilege assignments (4672).</p></div>
+        <button class="btn big" data-audit="auth" data-i18n="diag.authBtn">Audit Authentication &amp; Access Logs</button>
+      </div>
+      <div class="diag-card">
+        <div class="diag-ico">🛠</div>
+        <div class="diag-txt"><h3 data-i18n="diag.relTitle">Audit System Reliability &amp; Faults</h3>
+          <p class="muted" data-i18n="diag.relDesc">Reads the System and Application logs: service crashes (7034/7031), application faults (1000), hangs (1002), bugchecks and unexpected shutdowns.</p></div>
+        <button class="btn big" data-audit="reliability" data-i18n="diag.relBtn">Audit System Reliability &amp; Faults</button>
+      </div>
+      <label class="chk diag-window"><span data-i18n="diag.window">Look back</span>
+        <select id="diag-hours"><option value="24" data-i18n="diag.h24">24 hours</option><option value="168" selected data-i18n="diag.d7">7 days</option><option value="720" data-i18n="diag.d30">30 days</option></select></label>
+    </div>
+    <div id="diag-unavail" class="note" hidden data-i18n="diag.unavailable">Event-log audits need the Windows build of SysPulse.</div>
+    <div class="box diag-filter" id="diag-filter">
+      <div class="toolbar">
+        <h3 data-i18n="diag.filterTitle">Filter findings</h3>
+        <input id="diag-q" type="search" data-i18n-ph="diag.search" placeholder="Search account, component, diagnosis…">
+        <div class="chips" id="diag-sev-chips" role="group">
+          <button class="chip critical" data-dsev="critical"><span data-i18n="sev.critical">Critical</span> <b class="cnt" id="dc-critical">0</b></button>
+          <button class="chip warning" data-dsev="warning"><span data-i18n="sev.warning">Warning</span> <b class="cnt" id="dc-warning">0</b></button>
+          <button class="chip info" data-dsev="info"><span data-i18n="sev.info">Informational</span> <b class="cnt" id="dc-info">0</b></button>
+        </div>
+        <select id="diag-kind"><option value="" data-i18n="diag.allKinds">All finding types</option></select>
+      </div>
+      <div class="toolbar sub">
+        <div class="chips" id="diag-range-chips" role="group">
+          <button class="chip" data-drange="1" data-i18n="range.1h">1 h</button>
+          <button class="chip" data-drange="24" data-i18n="range.24h">24 h</button>
+          <button class="chip" data-drange="72" data-i18n="range.3d">3 days</button>
+          <button class="chip active" data-drange="" data-i18n="range.all">All</button>
+        </div>
+        <label class="chk"><span data-i18n="range.from">From</span> <input type="datetime-local" id="diag-from"></label>
+        <label class="chk"><span data-i18n="range.to">To</span> <input type="datetime-local" id="diag-to"></label>
+        <button class="btn small ghost" id="diag-reset" data-i18n="filters.reset">Reset filters</button>
+        <span class="spacer"></span><span class="muted small" id="diag-fcount"></span>
+      </div>
+    </div>
+    <div id="diag-reports"></div>
+  </section>
+  <section id="view-software" class="panel" data-view="software">
+    <div class="view-head"><div><h1 data-i18n="nav.software"></h1><p class="muted" data-i18n="desc.software"></p></div><div class="view-actions" id="va-software"></div></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="sw.apps">Installed applications</span> <span class="muted" id="app-count"></span></h3>
+        <input id="app-q" type="search" data-i18n-ph="sw.filter" placeholder="Filter by name or publisher…">
+        <select id="app-scope"><option value="" data-i18n="sw.allScopes">All scopes</option><option value="machine" data-i18n="scope.machine">Machine (64-bit)</option><option value="machine-x86" data-i18n="scope.machine-x86">Machine (32-bit)</option><option value="user" data-i18n="scope.user">Current user</option><option value="user-x86" data-i18n="scope.user-x86">Current user (32-bit)</option><option value="other-user" data-i18n="scope.other-user">Other users</option></select>
+        <select id="app-pub"><option value="" data-i18n="sw.allPublishers">All publishers</option></select>
+        <label class="chk"><input type="checkbox" id="app-upd"> <span data-i18n="sw.onlyUpd">only with updates</span></label>
+        <label class="chk"><input type="checkbox" id="app-hidden"> <span data-i18n="sw.showHidden">include system components &amp; updates</span></label>
+      </div>
+      <div class="sw-sum" id="sw-sum"></div>
+      <div class="tablewrap"><table class="grid" id="app-table">
+        <thead><tr><th data-k="name" data-i18n="col.name">Name</th><th data-k="version" data-i18n="col.version">Version</th><th data-k="available" data-i18n="col.update">Update</th><th data-k="publisher" data-i18n="col.publisher">Publisher</th><th data-k="installDate" data-i18n="col.installedOn">Installed</th><th data-k="sizeKB" class="num" data-i18n="col.size">Size</th><th data-k="arch" data-i18n="col.arch">Arch</th><th data-k="scope" data-i18n="col.scope">Scope</th></tr></thead>
+        <tbody></tbody></table></div>
+    </div>
+  </section>
+  <section id="view-updates" class="panel" data-view="updates">
+    <div class="view-head"><div><h1 data-i18n="nav.updates"></h1><p class="muted" data-i18n="desc.updates"></p></div><div class="view-actions" id="va-updates"></div></div>
+    <div class="box glass">
+      <div class="toolbar">
+        <h3><span data-i18n="sw.upgrades">Available upgrades</span> <span class="muted" id="sw-when"></span></h3>
+        <button class="btn" id="sw-refresh" data-i18n="sw.check">Check for updates</button>
+      </div>
+      <div class="note" id="sw-err" hidden></div>
+      <div class="tablewrap"><table class="grid" id="up-table">
+        <thead><tr><th data-i18n="col.name">Name</th><th data-i18n="col.pkg">Package ID</th><th data-i18n="col.installed">Installed</th><th data-i18n="col.available">Available</th><th data-i18n="col.source">Source</th><th data-i18n="col.command">Command</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <div id="sw-results"></div>
+    </div>
+  </section>
+  <section id="view-guide" class="panel" data-view="guide">
+    <div class="guide" id="guide"></div>
+  </section>
+</main>
+  </div>
+</div>
+
+<!-- Command palette -->
+<div class="palette" id="palette" hidden>
+  <div class="pal-card" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="pal-in"><svg class="ico"><use href="#i-search"/></svg><input id="pal-q" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="cmd.placeholder" placeholder="Type a view, process, service, IP, interface or command…"><kbd>Esc</kbd></div>
+    <ul class="pal-list" id="pal-list" role="listbox"></ul>
+    <div class="pal-foot muted small" data-i18n="cmd.foot">↑ ↓ navigate · Enter open · Esc close · / focuses the page filter</div>
+  </div>
+</div>
+
+<!-- Modal dialog -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head"><h3 id="modal-title"></h3><button class="iconbtn" id="modal-x" aria-label="close">✕</button></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/assets/i18n.js"></script>
+<script src="/assets/guide.js"></script>
+<script src="/assets/app.js"></script>
+<script src="/assets/v4.js"></script>
+</body>
+</html>
